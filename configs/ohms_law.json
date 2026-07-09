@@ -1,0 +1,12 @@
+{
+  "slug": "ohms_law",
+  "title": "전압과 전류의 관계 (옴의 법칙)",
+  "grade": "중2",
+  "wiki": "실험_저항_전류_전압_사이의_관계.md",
+  "xLabel": "전압", "xUnit": "V",
+  "yLabel": "전류의 세기", "yUnit": "A",
+  "xValues": [1.5, 3, 4.5, 6],
+  "trendline": "proportional",
+  "yMaxHint": 1,
+  "note": "교과서 과정(0~6V, 1.5V 간격)에서 0V 측정점은 생략(전류 0). 전류 예시값은 교과서에 없음 — 니크롬선 저항에 따라 다름. 추세선 기울기 = 1/R."
+}

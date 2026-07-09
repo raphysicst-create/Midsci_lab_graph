@@ -1,0 +1,12 @@
+{
+  "slug": "light_distance",
+  "title": "광원으로부터의 거리와 빛의 세기",
+  "grade": "중2",
+  "wiki": "실험_광원으로부터의_거리와_빛의_세기.md",
+  "xLabel": "거리", "xUnit": "cm",
+  "yLabel": "빛의 세기", "yUnit": "lx",
+  "xValues": [20, 40, 60],
+  "trendline": false,
+  "yMaxHint": 150,
+  "note": "거리의 제곱에 반비례하는 곡선이라 점만 표시 (교과서 예시: 136·37·14 lx). 주변을 어둡게 하고 측정."
+}

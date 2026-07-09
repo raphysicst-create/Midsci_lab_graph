@@ -1,0 +1,12 @@
+{
+  "slug": "paper_helicopter",
+  "title": "종이 헬리콥터의 날개 길이와 낙하 시간",
+  "grade": "중1",
+  "wiki": "실험_종이_헬리콥터로_알아보는_과학적_탐구_방법.md",
+  "xLabel": "날개 길이", "xUnit": "cm",
+  "yLabel": "낙하 시간(3회 평균)", "yUnit": "초",
+  "xValues": [6, 8.5],
+  "trendline": "linear",
+  "yMaxHint": 3,
+  "note": "교과서 고정값은 2개(6·8.5cm)뿐 — 날개 길이를 3개 이상으로 늘리면(제안) 추세선이 더 의미 있음. y는 3회 측정 평균을 입력."
+}
