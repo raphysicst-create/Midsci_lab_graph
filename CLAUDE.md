@@ -59,6 +59,9 @@ coverage.md     # 위키 실험 전체 목록과 적합/조정필요/부적합 �
 ## 금지사항
 
 - 위키 repo의 어떤 파일도 수정하지 않는다 (읽기 전용 참조).
+  이 규칙은 `.claude/hooks/block_wiki.py`(PreToolUse 훅)가 기계적으로도 강제한다 —
+  위키 경로 대상 Write/Edit는 거부되고, 위키 경로가 등장하는 셸 명령도 일괄
+  차단된다(위키 읽기는 Read/Grep/Glob 도구 사용). 훅을 지우거나 우회하지 않는다.
 - 템플릿의 `__CONFIG_START__`/`__CONFIG_END__` 마커를 지우지 않는다.
 - 교과서에 없는 측정값·단위를 `note` 표기 없이 config에 넣지 않는다.
 - `dist/`를 직접 손으로 편집하지 않는다 (항상 build.py 경유).

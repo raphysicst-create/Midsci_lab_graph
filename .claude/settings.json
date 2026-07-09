@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py \"C:/Users/22/Desktop/graph_apps/.claude/hooks/block_wiki.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
