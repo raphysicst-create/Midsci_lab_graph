@@ -1,0 +1,11 @@
+{
+  "slug": "spring_force",
+  "title": "용수철의 탄성력 측정",
+  "grade": "중1",
+  "wiki": "실험_용수철의_탄성력_측정.md",
+  "xLabel": "늘어난 길이", "xUnit": "cm",
+  "yLabel": "탄성력의 크기", "yUnit": "N",
+  "xValues": [5, 10, 15, 20],
+  "trendline": "proportional",
+  "yMaxHint": 10
+}
