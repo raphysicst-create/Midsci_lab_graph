@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>조별 실험 그래프 — 용수철의 탄성력 측정</title>
+<style>
+/* ============================================================
+   디자인 토큰 — 나중에 디자인을 입힐 때 이 블록만 교체하면 됨.
+   색·폰트·크기는 전부 여기서만 정의한다.
+   ============================================================ */
+:root {
+  /* 표면·잉크 */
+  --surface-1:      #fcfcfb;   /* 차트/카드 표면 */
+  --page:           #f9f9f7;   /* 페이지 배경 */
+  --text-primary:   #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted:     #898781;   /* 축 라벨·눈금 */
+  --gridline:       #e1e0d9;
+  --axisline:       #c3c2b7;
+  --border:         rgba(11,11,11,0.10);
+  /* 조별 색 (검증된 카테고리 팔레트 — 순서 고정, 순환 금지) */
+  --series-1: #2a78d6;  /* blue   */
+  --series-2: #1baf7a;  /* aqua   */
+  --series-3: #eda100;  /* yellow */
+  --series-4: #008300;  /* green  */
+  --series-5: #4a3aa7;  /* violet */
+  --series-6: #e34948;  /* red    */
+  --trend:    #0b0b0b;  /* 추세선 */
+  /* 타이포 (빔프로젝터용 큰 글씨) */
+  --font: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  --fs-base: 20px;
+  --fs-title: 44px;
+  --fs-scene-title: 32px;
+  --fs-table: 24px;
+  --fs-axis: 17px;
+  --fs-axis-label: 21px;
+  --radius: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --axisline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-2: #199e70;
+    --series-3: #c98500;
+    --series-4: #008300;
+    --series-5: #9085e9;
+    --series-6: #e66767;
+    --trend:    #ffffff;
+  }
+}
+
+/* ============================================================
+   뼈대 레이아웃 — 시맨틱 구조. 프레젠테이션 프레임에 이식 가능.
+   ============================================================ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  color: var(--text-primary);
+  background: var(--page);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+header.app-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+header.app-bar .spacer { flex: 1; }
+header.app-bar button {
+  font: inherit;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+header.app-bar button:hover { color: var(--text-primary); }
+
+main.stage { flex: 1; position: relative; min-height: 0; }
+
+section.scene {
+  position: absolute;
+  inset: 0;
+  padding: 28px 44px 84px;
+  display: none;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+section.scene.active { display: flex; opacity: 1; }
+
+.scene-title {
+  font-size: var(--fs-scene-title);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.scene-sub { color: var(--text-secondary); margin-bottom: 18px; }
+.scene-body { flex: 1; display: flex; gap: 36px; min-height: 0; }
+
+/* --- 도입 씬 --- */
+#scene-intro { align-items: center; justify-content: center; text-align: center; }
+#scene-intro h1 { font-size: var(--fs-title); margin-bottom: 10px; }
+#scene-intro .axes-hint {
+  font-size: 24px; color: var(--text-secondary);
+  margin-bottom: 26px;
+}
+#scene-intro .axes-hint b { color: var(--text-primary); }
+#scene-intro .chart-card { width: min(880px, 88%); }
+
+/* --- 카드 --- */
+.chart-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.chart-card svg { width: 100%; height: 100%; }
+
+/* --- 조별 입력 표 --- */
+.table-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 26px;
+  align-self: flex-start;
+}
+.group-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+.group-badge .swatch {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--group-color, var(--text-muted));
+}
+table.data-table { border-collapse: collapse; font-size: var(--fs-table); }
+table.data-table th, table.data-table td {
+  border: 1px solid var(--gridline);
+  padding: 10px 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+table.data-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 18px;
+  background: var(--page);
+}
+table.data-table td.x-cell { color: var(--text-secondary); }
+table.data-table input {
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  width: 110px;
+  text-align: center;
+  border: none;
+  background: transparent;
+  outline: none;
+}
+table.data-table td.y-cell { padding: 0; }
+table.data-table td.y-cell:focus-within { outline: 2px solid var(--group-color, var(--text-muted)); outline-offset: -2px; }
+table.data-table tr.landed td.y-cell { background: color-mix(in srgb, var(--group-color) 14%, transparent); }
+.table-hint { margin-top: 14px; font-size: 15px; color: var(--text-muted); }
+
+/* --- 종합 씬 --- */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.legend button.chip {
+  font: inherit;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.legend button.chip .swatch { width: 14px; height: 14px; border-radius: 50%; }
+.legend button.chip.off { opacity: .35; }
+.legend button.chip.trend-chip .swatch { border-radius: 2px; height: 4px; }
+.trend-readout {
+  margin-top: 12px;
+  font-size: 22px;
+  color: var(--text-secondary);
+  min-height: 1.4em;
+}
+.trend-readout b { color: var(--text-primary); }
+
+/* --- 하단 내비게이션 --- */
+nav.deck-nav {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 14px;
+}
+nav.deck-nav button.nav-btn {
+  font: inherit;
+  font-size: 22px;
+  padding: 8px 22px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+nav.deck-nav button.nav-btn:disabled { opacity: .3; cursor: default; }
+nav.deck-nav .dots { display: flex; gap: 8px; }
+nav.deck-nav .dots button {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  border: none;
+  background: var(--gridline);
+  cursor: pointer;
+  padding: 0;
+}
+nav.deck-nav .dots button.on { background: var(--text-secondary); }
+
+/* --- SVG 차트 --- */
+.grid line { stroke: var(--gridline); stroke-width: 1; }
+.axis line { stroke: var(--axisline); stroke-width: 1.5; }
+.axis text, .ticks text {
+  fill: var(--text-muted);
+  font-size: var(--fs-axis);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+}
+.axis-label {
+  fill: var(--text-secondary);
+  font-size: var(--fs-axis-label);
+  font-weight: 600;
+  font-family: var(--font);
+}
+circle.pt { stroke: var(--surface-1); stroke-width: 2; }
+circle.pt.ghost { opacity: .35; }
+circle.pt.pop { animation: pop .45s ease; }
+@keyframes pop {
+  0% { transform: scale(0); }
+  70% { transform: scale(1.5); }
+  100% { transform: scale(1); }
+}
+line.guide {
+  stroke-dasharray: 6 6;
+  stroke-width: 2;
+  animation: guide-fade 2.2s ease forwards;
+}
+@keyframes guide-fade {
+  0% { opacity: 0; }
+  15% { opacity: .8; }
+  70% { opacity: .8; }
+  100% { opacity: 0; }
+}
+path.trendline {
+  fill: none;
+  stroke: var(--trend);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+text.pt-label {
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 600;
+  fill: var(--text-secondary);
+}
+
+/* 도입 씬 축 드로잉 애니메이션 */
+.draw-in line.axis-line {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: draw 1.1s ease forwards;
+}
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.draw-in .axis-label, .draw-in .ticks text {
+  opacity: 0;
+  animation: fade-in .6s ease forwards;
+  animation-delay: .9s;
+}
+@keyframes fade-in { to { opacity: 1; } }
+
+/* 표 → 그래프로 날아가는 점 */
+.fly-dot {
+  position: fixed;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-1);
+  pointer-events: none;
+  z-index: 99;
+  transition: transform .8s cubic-bezier(.25,.7,.3,1);
+}
+
+/* 툴팁 */
+#tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--text-primary);
+  color: var(--surface-1);
+  font-size: 16px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  z-index: 100;
+  display: none;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<script>
+/* ============================================================
+   실험 설정 — build.py가 __CONFIG_START__/__CONFIG_END__ 사이를
+   configs/*.json 내용으로 치환해 dist/에 실험별 파일을 생성한다.
+   (마커를 지우면 빌드가 실패한다. 수동 편집 시에도 객체만 바꿀 것.)
+   ============================================================ */
+// __CONFIG_START__
+const CONFIG = {
+  title: "물을 가열할 때의 온도 변화",
+  xLabel: "시간",
+  xUnit: "분",
+  yLabel: "온도",
+  yUnit: "℃",
+  xValues: [0, 4, 8, 12, 16, 20],
+  trendline: false,
+  yMaxHint: 110,
+  groupNames: ["1조", "2조", "3조", "4조", "5조", "6조"],
+};
+// __CONFIG_END__
+
+/* 다른 실험 예시 — 샤를 법칙 (기체의 온도와 부피 관계):
+const CONFIG = {
+  title: "기체의 온도와 부피 관계",
+  xLabel: "온도", xUnit: "℃",
+  yLabel: "물방울 위치", yUnit: "cm",
+  xValues: [15, 25, 35, 45],
+  groupNames: ["1조", "2조", "3조", "4조", "5조", "6조"],
+  trendline: "linear",
+  yMaxHint: 15,
+};
+*/
+</script>
+
+<header class="app-bar">
+  <span id="bar-title"></span>
+  <span class="spacer"></span>
+  <button id="btn-fullscreen" type="button">⛶ 전체화면</button>
+  <button id="btn-reset" type="button">전체 지우기</button>
+</header>
+
+<main class="stage">
+
+  <!-- 씬 0: 도입 — 축 개념 잡기 -->
+  <section class="scene" id="scene-intro" data-scene="intro">
+    <h1 id="intro-title"></h1>
+    <p class="axes-hint" id="intro-hint"></p>
+    <div class="chart-card"><svg id="svg-intro"></svg></div>
+  </section>
+
+  <!-- 씬 1~N: 조별 입력 (하나의 섹션을 조 번호만 바꿔 재사용) -->
+  <section class="scene" id="scene-group" data-scene="group">
+    <div class="scene-title group-badge">
+      <span class="swatch"></span><span id="group-name"></span>
+      <span style="font-weight:400; font-size:22px; color:var(--text-secondary)">측정 결과</span>
+    </div>
+    <div class="scene-body">
+      <div class="table-card">
+        <table class="data-table" id="group-table"></table>
+        <p class="table-hint">값을 넣고 Enter — 표의 숫자가 그래프의 점이 됩니다</p>
+      </div>
+      <div class="chart-card"><svg id="svg-group"></svg></div>
+    </div>
+  </section>
+
+  <!-- 마지막 씬: 종합 — 모든 조 + 추세선 -->
+  <section class="scene" id="scene-summary" data-scene="summary">
+    <div class="scene-title">모든 조의 결과를 한 그래프에</div>
+    <div class="legend" id="legend"></div>
+    <div class="scene-body">
+      <div class="chart-card"><svg id="svg-summary"></svg></div>
+    </div>
+    <p class="trend-readout" id="trend-readout"></p>
+  </section>
+
+</main>
+
+<nav class="deck-nav">
+  <button class="nav-btn" id="btn-prev" type="button">◀ 이전</button>
+  <div class="dots" id="dots"></div>
+  <button class="nav-btn" id="btn-next" type="button">다음 ▶</button>
+</nav>
+
+<div id="tooltip"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   상태
+   ============================================================ */
+const G = CONFIG.groupNames.length;          // 조 수
+const N = CONFIG.xValues.length;             // 측정점 수
+const SCENES = 1 + G + 1;                    // 도입 + 조별 + 종합
+const STORE_KEY = "group_graph::" + CONFIG.title;
+
+const state = {
+  scene: 0,
+  group: 0,                                  // 현재 조 (0-based)
+  data: loadData(),                          // data[g][i] = y값 or null
+  visible: Array(G).fill(true),              // 종합 씬 조별 토글
+  trendOn: false,
+};
+
+function loadData() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (Array.isArray(raw) && raw.length === G &&
+        raw.every(r => Array.isArray(r) && r.length === N))
+      return raw;
+  } catch (e) { /* 무시하고 초기화 */ }
+  return Array.from({ length: G }, () => Array(N).fill(null));
+}
+function saveData() { localStorage.setItem(STORE_KEY, JSON.stringify(state.data)); }
+
+const groupColor = g => `var(--series-${g + 1})`;
+const allPoints = (visibleOnly = false) => {
+  const pts = [];
+  state.data.forEach((row, g) => {
+    if (visibleOnly && !state.visible[g]) return;
+    row.forEach((y, i) => { if (y != null) pts.push({ g, x: CONFIG.xValues[i], y }); });
+  });
+  return pts;
+};
+
+/* ============================================================
+   좌표계·축
+   ============================================================ */
+const VB = { w: 920, h: 620 };
+const M = { l: 90, r: 30, t: 24, b: 78 };    // 여백
+const plotW = VB.w - M.l - M.r, plotH = VB.h - M.t - M.b;
+
+function niceCeil(v) {                        // 보기 좋은 값으로 올림
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}
+function tickStep(max) {                      // 눈금 4~6개가 되는 간격
+  const rough = max / 5;
+  const p = Math.pow(10, Math.floor(Math.log10(rough)));
+  for (const m of [1, 2, 2.5, 3, 5, 10]) if (m * p >= rough) return m * p;
+  return 10 * p;
+}
+const xMax = niceCeil(Math.max(...CONFIG.xValues) * 1.1);
+function yMaxNow() {
+  const ys = allPoints().map(p => p.y);
+  return niceCeil(Math.max(CONFIG.yMaxHint || 1, ...(ys.length ? ys : [0]).map(v => v * 1.12)));
+}
+const scales = ymax => ({
+  px: x => M.l + (x / xMax) * plotW,
+  py: y => M.t + plotH - (y / ymax) * plotH,
+});
+
+const SVGNS = "http://www.w3.org/2000/svg";
+function el(name, attrs = {}, parent = null) {
+  const node = document.createElementNS(SVGNS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (parent) parent.appendChild(node);
+  return node;
+}
+function fmt(v) { return (+v.toFixed(2)).toLocaleString("ko-KR"); }
+
+/* 축·격자·라벨을 그리고 { s, ptLayer, trendLayer, guideLayer } 반환 */
+function drawChart(svg, ymax) {
+  svg.setAttribute("viewBox", `0 0 ${VB.w} ${VB.h}`);
+  svg.innerHTML = "";
+  const s = scales(ymax);
+  const grid = el("g", { class: "grid" }, svg);
+  const ticksG = el("g", { class: "ticks" }, svg);
+  const axis = el("g", { class: "axis" }, svg);
+
+  for (let x = tickStep(xMax); x <= xMax + 1e-9; x += tickStep(xMax)) {
+    el("line", { x1: s.px(x), y1: M.t, x2: s.px(x), y2: M.t + plotH }, grid);
+    el("text", { x: s.px(x), y: M.t + plotH + 26, "text-anchor": "middle" }, ticksG)
+      .textContent = fmt(x);
+  }
+  for (let y = tickStep(ymax); y <= ymax + 1e-9; y += tickStep(ymax)) {
+    el("line", { x1: M.l, y1: s.py(y), x2: M.l + plotW, y2: s.py(y) }, grid);
+    el("text", { x: M.l - 12, y: s.py(y) + 6, "text-anchor": "end" }, ticksG)
+      .textContent = fmt(y);
+  }
+  el("line", { class: "axis-line", x1: M.l, y1: M.t + plotH, x2: M.l + plotW, y2: M.t + plotH }, axis);
+  el("line", { class: "axis-line", x1: M.l, y1: M.t + plotH, x2: M.l, y2: M.t }, axis);
+  el("text", { x: M.l - 12, y: M.t + plotH + 26, "text-anchor": "end", class: "ticks" }, ticksG)
+    .textContent = "0";
+
+  el("text", { class: "axis-label", x: M.l + plotW / 2, y: VB.h - 16, "text-anchor": "middle" }, svg)
+    .textContent = `${CONFIG.xLabel} (${CONFIG.xUnit})`;
+  el("text", {
+    class: "axis-label", x: 24, y: M.t + plotH / 2, "text-anchor": "middle",
+    transform: `rotate(-90 24 ${M.t + plotH / 2})`,
+  }, svg).textContent = `${CONFIG.yLabel} (${CONFIG.yUnit})`;
+
+  // 추세선이 플롯 영역 밖으로 나가지 않게 클리핑
+  const clipId = "clip-" + svg.id;
+  const clip = el("clipPath", { id: clipId }, el("defs", {}, svg));
+  el("rect", { x: M.l, y: M.t, width: plotW, height: plotH }, clip);
+
+  const trendLayer = el("g", { "clip-path": `url(#${clipId})` }, svg);
+  const guideLayer = el("g", {}, svg);
+  const ptLayer = el("g", {}, svg);
+  return { s, ptLayer, trendLayer, guideLayer };
+}
+
+function drawPoint(layer, s, p, { ghost = false, pop = false, r = 9 } = {}) {
+  const c = el("circle", {
+    class: "pt" + (ghost ? " ghost" : "") + (pop ? " pop" : ""),
+    cx: s.px(p.x), cy: s.py(p.y), r: ghost ? 6 : r,
+    "transform-origin": `${s.px(p.x)}px ${s.py(p.y)}px`,
+  }, layer);
+  c.style.fill = ghost ? "var(--text-muted)" : groupColor(p.g);
+  c.dataset.tip = `${CONFIG.groupNames[p.g]} · ${CONFIG.xLabel} ${fmt(p.x)}${CONFIG.xUnit} → ${CONFIG.yLabel} ${fmt(p.y)}${CONFIG.yUnit}`;
+  return c;
+}
+
+/* 점이 찍힐 때 축에서 점까지 안내선 (x값 따라 →, y값 따라 ↑) */
+function drawGuides(layer, s, p, color) {
+  layer.innerHTML = "";
+  for (const [x1, y1] of [[s.px(p.x), s.py(0)], [s.px(0), s.py(p.y)]]) {
+    const ln = el("line", { class: "guide", x1, y1, x2: s.px(p.x), y2: s.py(p.y) }, layer);
+    ln.style.stroke = color;
+  }
+}
+
+/* ============================================================
+   추세선 (최소제곱)
+   ============================================================ */
+function fitTrend(pts) {
+  if (pts.length < 2) return null;
+  if (CONFIG.trendline === "proportional") {         // y = ax (원점 통과)
+    let sxy = 0, sxx = 0;
+    for (const p of pts) { sxy += p.x * p.y; sxx += p.x * p.x; }
+    return sxx ? { a: sxy / sxx, b: 0 } : null;
+  }
+  let sx = 0, sy = 0, sxy = 0, sxx = 0;              // y = ax + b
+  for (const p of pts) { sx += p.x; sy += p.y; sxy += p.x * p.y; sxx += p.x * p.x; }
+  const n = pts.length, d = n * sxx - sx * sx;
+  if (!d) return null;
+  const a = (n * sxy - sx * sy) / d;
+  return { a, b: (sy - a * sx) / n };
+}
+
+function drawTrendline(layer, s, fit, animate) {
+  layer.innerHTML = "";
+  if (!fit) return;
+  const path = el("path", {
+    class: "trendline",
+    d: `M ${s.px(0)} ${s.py(fit.b)} L ${s.px(xMax)} ${s.py(fit.a * xMax + fit.b)}`,
+  }, layer);
+  if (animate) {
+    const len = path.getTotalLength();
+    path.style.strokeDasharray = len;
+    path.style.strokeDashoffset = len;
+    path.style.transition = "stroke-dashoffset 1.4s ease";
+    requestAnimationFrame(() => requestAnimationFrame(() => { path.style.strokeDashoffset = 0; }));
+  }
+}
+
+/* ============================================================
+   씬 렌더링
+   ============================================================ */
+const $ = sel => document.querySelector(sel);
+const sceneEls = {
+  intro: $("#scene-intro"),
+  group: $("#scene-group"),
+  summary: $("#scene-summary"),
+};
+let groupChart = null;   // 현재 조 씬의 { s, ptLayer, ... }
+
+function renderIntro() {
+  $("#intro-title").textContent = CONFIG.title;
+  $("#intro-hint").innerHTML =
+    `가로축은 <b>${CONFIG.xLabel}(${CONFIG.xUnit})</b>, 세로축은 <b>${CONFIG.yLabel}(${CONFIG.yUnit})</b> — ` +
+    `측정한 두 값이 만나는 곳에 점을 찍습니다`;
+  const svg = $("#svg-intro");
+  svg.classList.remove("draw-in");
+  drawChart(svg, yMaxNow());
+  void svg.getBoundingClientRect();          // 리플로 → 애니메이션 재시작
+  svg.classList.add("draw-in");
+}
+
+function renderGroup(g) {
+  state.group = g;
+  const scene = sceneEls.group;
+  scene.style.setProperty("--group-color", groupColor(g));
+  scene.querySelector(".group-badge .swatch").style.background = groupColor(g);
+  $("#group-name").textContent = CONFIG.groupNames[g];
+
+  // 표
+  const table = $("#group-table");
+  table.innerHTML =
+    `<tr><th>${CONFIG.xLabel}(${CONFIG.xUnit})</th><th>${CONFIG.yLabel}(${CONFIG.yUnit})</th></tr>` +
+    CONFIG.xValues.map((x, i) => `
+      <tr data-row="${i}" class="${state.data[g][i] != null ? "landed" : ""}">
+        <td class="x-cell">${fmt(x)}</td>
+        <td class="y-cell"><input type="number" min="0" step="any" inputmode="decimal"
+             data-i="${i}" value="${state.data[g][i] ?? ""}"></td>
+      </tr>`).join("");
+  table.querySelectorAll("input").forEach(inp => {
+    inp.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); commitInput(inp, true); }
+    });
+    inp.addEventListener("blur", () => commitInput(inp, false));
+  });
+
+  // 그래프: 이전 조들은 회색 잔상, 이번 조는 제 색으로
+  renderGroupChartOnly();
+  const firstEmpty = table.querySelector("tr:not(.landed) input");
+  if (firstEmpty) firstEmpty.focus();
+}
+
+function commitInput(inp, fly) {
+  const g = state.group, i = +inp.dataset.i;
+  const prev = state.data[g][i];
+  const v = inp.value.trim() === "" ? null : +inp.value;
+  if (v !== null && (!isFinite(v) || v < 0)) {   // 음수·비정상값은 되돌림
+    inp.value = prev ?? "";
+    return;
+  }
+  if (v === prev) { if (fly) focusNextInput(inp); return; }
+  state.data[g][i] = v;
+  saveData();
+
+  const row = inp.closest("tr");
+  row.classList.toggle("landed", v != null);
+
+  if (v != null && fly) inFlight.add(g + ":" + i);
+  renderGroupChartOnly();                     // 축 확장 포함 재렌더
+
+  if (v != null && fly) {
+    const p = { g, x: CONFIG.xValues[i], y: v };
+    const target = findOwnCircle(i);
+    if (target) flyDot(inp.closest("td"), target, groupColor(g), () => {
+      inFlight.delete(g + ":" + i);
+      const c = findOwnCircle(i);             // 재렌더됐어도 현재 차트에서 다시 찾음
+      if (c) { c.style.opacity = ""; c.classList.add("pop"); }
+      drawGuides(groupChart.guideLayer, groupChart.s, p, groupColor(g));
+    });
+    focusNextInput(inp);
+  }
+}
+
+/* 현재 조 씬 차트에서 i번째 측정점의 (잔상 아닌) 원을 찾는다 */
+function findOwnCircle(i) {
+  const cx = groupChart.s.px(CONFIG.xValues[i]);
+  return [...groupChart.ptLayer.querySelectorAll("circle:not(.ghost)")]
+    .find(c => +c.getAttribute("cx") === cx);
+}
+
+/* 아직 날아가는 중인 점은 착지 전까지 차트에서 숨긴다 */
+const inFlight = new Set();
+
+function renderGroupChartOnly() {
+  const g = state.group;
+  const svg = $("#svg-group");
+  groupChart = drawChart(svg, yMaxNow());
+  for (const p of allPoints()) {
+    if (p.g !== g) { drawPoint(groupChart.ptLayer, groupChart.s, p, { ghost: true }); continue; }
+    const c = drawPoint(groupChart.ptLayer, groupChart.s, p);
+    if (inFlight.has(p.g + ":" + CONFIG.xValues.indexOf(p.x))) c.style.opacity = 0;
+  }
+}
+
+function focusNextInput(inp) {
+  const inputs = [...$("#group-table").querySelectorAll("input")];
+  const next = inputs[inputs.indexOf(inp) + 1];
+  if (next) next.focus();
+}
+
+/* 표 셀 → 그래프 점으로 날아가는 애니메이션 */
+function flyDot(cellEl, targetCircle, color, onLand) {
+  const a = cellEl.getBoundingClientRect();
+  const b = targetCircle.getBoundingClientRect();
+  const dot = document.createElement("div");
+  dot.className = "fly-dot";
+  dot.style.background = color;
+  dot.style.left = (a.left + a.width / 2 - 9) + "px";
+  dot.style.top = (a.top + a.height / 2 - 9) + "px";
+  document.body.appendChild(dot);
+  void dot.getBoundingClientRect();
+  dot.style.transform =
+    `translate(${b.left + b.width / 2 - (a.left + a.width / 2)}px,` +
+    ` ${b.top + b.height / 2 - (a.top + a.height / 2)}px)`;
+  setTimeout(() => {
+    dot.remove();
+    if (onLand) onLand();
+  }, 820);
+}
+
+function renderSummary(animateTrend = false) {
+  // 범례 (조별 토글 + 추세선 토글)
+  const legend = $("#legend");
+  legend.innerHTML = "";
+  CONFIG.groupNames.forEach((name, g) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip" + (state.visible[g] ? "" : " off");
+    btn.innerHTML = `<span class="swatch" style="background:${groupColor(g)}"></span>${name}`;
+    btn.addEventListener("click", () => {
+      state.visible[g] = !state.visible[g];
+      renderSummary();
+    });
+    legend.appendChild(btn);
+  });
+  if (CONFIG.trendline) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip trend-chip" + (state.trendOn ? "" : " off");
+    btn.innerHTML = `<span class="swatch" style="background:var(--trend)"></span>추세선`;
+    btn.addEventListener("click", () => {
+      state.trendOn = !state.trendOn;
+      renderSummary(state.trendOn);           // 켤 때만 드로잉 애니메이션
+    });
+    legend.appendChild(btn);
+  }
+
+  const svg = $("#svg-summary");
+  const chart = drawChart(svg, yMaxNow());
+  const pts = allPoints(true);
+
+  // 조별로 시차를 두고 등장 (모이는 느낌)
+  CONFIG.groupNames.forEach((_, g) => {
+    setTimeout(() => {
+      for (const p of pts.filter(p => p.g === g))
+        drawPoint(chart.ptLayer, chart.s, p, { pop: true });
+    }, g * 130);
+  });
+
+  // 추세선 + 읽어주기
+  const readout = $("#trend-readout");
+  if (state.trendOn && CONFIG.trendline) {
+    const fit = fitTrend(pts);
+    setTimeout(() => drawTrendline(chart.trendLayer, chart.s, fit, animateTrend),
+      G * 130 + 100);
+    if (fit) {
+      const bTxt = CONFIG.trendline === "linear" && Math.abs(fit.b) > 1e-9
+        ? ` ${fit.b >= 0 ? "+" : "−"} ${fmt(Math.abs(fit.b))}` : "";
+      readout.innerHTML =
+        `추세선: <b>${CONFIG.yLabel} ≈ ${fmt(fit.a)} × ${CONFIG.xLabel}${bTxt}</b>` +
+        ` <span style="color:var(--text-muted)">(점 ${pts.length}개로 계산)</span>`;
+    } else {
+      readout.textContent = "점이 2개 이상 있어야 추세선을 그릴 수 있습니다";
+    }
+  } else {
+    readout.textContent = "";
+  }
+}
+
+/* ============================================================
+   씬 전환·내비게이션
+   ============================================================ */
+function sceneKind(i) { return i === 0 ? "intro" : i <= G ? "group" : "summary"; }
+
+function showScene(i) {
+  state.scene = Math.max(0, Math.min(SCENES - 1, i));
+  const kind = sceneKind(state.scene);
+  for (const [k, elm] of Object.entries(sceneEls)) elm.classList.toggle("active", k === kind);
+  if (kind === "intro") renderIntro();
+  else if (kind === "group") renderGroup(state.scene - 1);
+  else renderSummary();
+  $("#btn-prev").disabled = state.scene === 0;
+  $("#btn-next").disabled = state.scene === SCENES - 1;
+  renderDots();
+}
+
+function renderDots() {
+  const dots = $("#dots");
+  dots.innerHTML = "";
+  for (let i = 0; i < SCENES; i++) {
+    const d = document.createElement("button");
+    d.type = "button";
+    d.className = i === state.scene ? "on" : "";
+    d.title = sceneKind(i) === "intro" ? "도입"
+      : sceneKind(i) === "group" ? CONFIG.groupNames[i - 1] : "종합";
+    d.addEventListener("click", () => showScene(i));
+    dots.appendChild(d);
+  }
+}
+
+$("#btn-prev").addEventListener("click", () => showScene(state.scene - 1));
+$("#btn-next").addEventListener("click", () => showScene(state.scene + 1));
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); showScene(state.scene + 1); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); showScene(state.scene - 1); }
+});
+
+$("#btn-reset").addEventListener("click", () => {
+  if (!confirm("모든 조의 입력값을 지울까요? (다음 반 수업 시작)")) return;
+  state.data = Array.from({ length: G }, () => Array(N).fill(null));
+  state.visible = Array(G).fill(true);
+  state.trendOn = false;
+  saveData();
+  showScene(0);
+});
+
+$("#btn-fullscreen").addEventListener("click", () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen();
+});
+
+/* 툴팁 */
+const tooltip = $("#tooltip");
+document.addEventListener("mousemove", e => {
+  const c = e.target.closest ? e.target.closest("circle.pt") : null;
+  if (c && c.dataset.tip) {
+    tooltip.textContent = c.dataset.tip;
+    tooltip.style.display = "block";
+    tooltip.style.left = (e.clientX + 14) + "px";
+    tooltip.style.top = (e.clientY - 34) + "px";
+  } else {
+    tooltip.style.display = "none";
+  }
+});
+
+/* ============================================================
+   시작
+   ============================================================ */
+document.title = "조별 실험 그래프 — " + CONFIG.title;
+$("#bar-title").textContent = CONFIG.title;
+showScene(0);
+</script>
+</body>
+</html>
