@@ -143,6 +143,8 @@ section.scene.active { display: flex; opacity: 1; }
   border-radius: var(--radius);
   padding: 22px 26px;
   align-self: flex-start;
+  max-height: 100%;
+  overflow-y: auto;
 }
 .group-badge {
   display: inline-flex;
@@ -184,6 +186,9 @@ table.data-table td.y-cell { padding: 0; }
 table.data-table td.y-cell:focus-within { outline: 2px solid var(--group-color, var(--text-muted)); outline-offset: -2px; }
 table.data-table tr.landed td.y-cell { background: color-mix(in srgb, var(--group-color) 14%, transparent); }
 .table-hint { margin-top: 14px; font-size: 15px; color: var(--text-muted); }
+/* 측정점이 많은 실험(8행 이상)은 표를 압축해 화면에 다 보이게 */
+table.data-table.compact th, table.data-table.compact td { padding: 4px 10px; font-size: 19px; }
+table.data-table.compact input { width: 84px; }
 
 /* --- 종합 씬 --- */
 .legend {
@@ -208,6 +213,8 @@ table.data-table tr.landed td.y-cell { background: color-mix(in srgb, var(--grou
 .legend button.chip .swatch { width: 14px; height: 14px; border-radius: 50%; }
 .legend button.chip.off { opacity: .35; }
 .legend button.chip.trend-chip .swatch { border-radius: 2px; height: 4px; }
+.legend button.chip.info { cursor: default; }
+.legend button.chip .swatch.ring { background: transparent; border: 3px solid var(--text-secondary); }
 .trend-readout {
   margin-top: 12px;
   font-size: 22px;
@@ -351,22 +358,21 @@ const CONFIG = {
   yLabel: "빛의 세기",
   yUnit: "lx",
   xValues: [20, 40, 60],
-  trendline: false,
+  trendline: "inverse",
   yMaxHint: 150,
+  trendPower: 2,
   groupNames: ["1조", "2조", "3조", "4조", "5조", "6조"],
 };
 // __CONFIG_END__
 
-/* 다른 실험 예시 — 샤를 법칙 (기체의 온도와 부피 관계):
-const CONFIG = {
-  title: "기체의 온도와 부피 관계",
-  xLabel: "온도", xUnit: "℃",
-  yLabel: "물방울 위치", yUnit: "cm",
-  xValues: [15, 25, 35, 45],
-  groupNames: ["1조", "2조", "3조", "4조", "5조", "6조"],
-  trendline: "linear",
-  yMaxHint: 15,
-};
+/* 선택 필드 (생략하면 비활성):
+   entryMode: "free"     — 각 조가 (x, y) 쌍을 자유 입력. xValues 무시, xMaxHint 필수
+   maxPoints: 5          — free 모드에서 조당 입력 행 수 (기본 5)
+   xMaxHint: 50          — free 모드 가로축 시작 최댓값 (데이터가 넘으면 자동 확장)
+   ySeries: ["뜨거운 물", "찬 물"]
+                         — 고정 x에서 조당 y 2계열 입력 (●=1번째, ○=2번째 마커)
+   trendline: "inverse" (+ trendPower: 1|2)
+                         — 반비례 곡선 y = a/x 또는 a/x² 추세선
 */
 </script>
 
@@ -427,14 +433,21 @@ const CONFIG = {
    상태
    ============================================================ */
 const G = CONFIG.groupNames.length;          // 조 수
-const N = CONFIG.xValues.length;             // 측정점 수
+/* 입력 모드: fixed(고정 x, y 1개) | dual(고정 x, y 2계열) | free(x·y 자유 입력) */
+const MODE = CONFIG.entryMode === "free" ? "free"
+  : (Array.isArray(CONFIG.ySeries) && CONFIG.ySeries.length === 2 ? "dual" : "fixed");
+const N = MODE === "free" ? (CONFIG.maxPoints || 5) : CONFIG.xValues.length;   // 행 수
 const SCENES = 1 + G + 1;                    // 도입 + 조별 + 종합
 const STORE_KEY = "group_graph::" + CONFIG.title;
+
+/* 저장 셀 모양 — fixed: y값|null, dual: [y1,y2], free: [x,y] */
+const emptyCell = () => (MODE === "fixed" ? null : [null, null]);
+const emptyData = () => Array.from({ length: G }, () => Array.from({ length: N }, emptyCell));
 
 const state = {
   scene: 0,
   group: 0,                                  // 현재 조 (0-based)
-  data: loadData(),                          // data[g][i] = y값 or null
+  data: loadData(),
   visible: Array(G).fill(true),              // 종합 씬 조별 토글
   trendOn: false,
 };
@@ -442,20 +455,39 @@ const state = {
 function loadData() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE_KEY));
+    const cellOk = c => MODE === "fixed"
+      ? (c === null || typeof c === "number")
+      : (Array.isArray(c) && c.length === 2 &&
+         c.every(v => v === null || typeof v === "number"));
     if (Array.isArray(raw) && raw.length === G &&
-        raw.every(r => Array.isArray(r) && r.length === N))
+        raw.every(r => Array.isArray(r) && r.length === N && r.every(cellOk)))
       return raw;
   } catch (e) { /* 무시하고 초기화 */ }
-  return Array.from({ length: G }, () => Array(N).fill(null));
+  return emptyData();
 }
 function saveData() { localStorage.setItem(STORE_KEY, JSON.stringify(state.data)); }
 
+/* 표의 한 입력칸 값 — f: fixed는 0(y), dual은 계열 번호, free는 0(x)/1(y) */
+function getField(g, i, f) { return MODE === "fixed" ? state.data[g][i] : state.data[g][i][f]; }
+function setField(g, i, f, v) {
+  if (MODE === "fixed") state.data[g][i] = v; else state.data[g][i][f] = v;
+}
+
 const groupColor = g => `var(--series-${g + 1})`;
+/* 점 목록 — {g, i, s(계열), x, y}. free는 x·y 둘 다 있어야 점이 된다 */
 const allPoints = (visibleOnly = false) => {
   const pts = [];
   state.data.forEach((row, g) => {
     if (visibleOnly && !state.visible[g]) return;
-    row.forEach((y, i) => { if (y != null) pts.push({ g, x: CONFIG.xValues[i], y }); });
+    row.forEach((cell, i) => {
+      if (MODE === "fixed") {
+        if (cell != null) pts.push({ g, i, s: 0, x: CONFIG.xValues[i], y: cell });
+      } else if (MODE === "dual") {
+        cell.forEach((y, s) => { if (y != null) pts.push({ g, i, s, x: CONFIG.xValues[i], y }); });
+      } else if (cell[0] != null && cell[1] != null) {
+        pts.push({ g, i, s: 0, x: cell[0], y: cell[1] });
+      }
+    });
   });
   return pts;
 };
@@ -479,13 +511,17 @@ function tickStep(max) {                      // 눈금 4~6개가 되는 간격
   for (const m of [1, 2, 2.5, 3, 5, 10]) if (m * p >= rough) return m * p;
   return 10 * p;
 }
-const xMax = niceCeil(Math.max(...CONFIG.xValues) * 1.1);
+function xMaxNow() {
+  if (MODE !== "free") return niceCeil(Math.max(...CONFIG.xValues) * 1.1);
+  const xs = allPoints().map(p => p.x);
+  return niceCeil(Math.max(CONFIG.xMaxHint || 1, ...(xs.length ? xs : [0]).map(v => v * 1.12)));
+}
 function yMaxNow() {
   const ys = allPoints().map(p => p.y);
   return niceCeil(Math.max(CONFIG.yMaxHint || 1, ...(ys.length ? ys : [0]).map(v => v * 1.12)));
 }
-const scales = ymax => ({
-  px: x => M.l + (x / xMax) * plotW,
+const scales = (xmax, ymax) => ({
+  px: x => M.l + (x / xmax) * plotW,
   py: y => M.t + plotH - (y / ymax) * plotH,
 });
 
@@ -498,16 +534,16 @@ function el(name, attrs = {}, parent = null) {
 }
 function fmt(v) { return (+v.toFixed(2)).toLocaleString("ko-KR"); }
 
-/* 축·격자·라벨을 그리고 { s, ptLayer, trendLayer, guideLayer } 반환 */
-function drawChart(svg, ymax) {
+/* 축·격자·라벨을 그리고 { s, xmax, ymax, ptLayer, trendLayer, guideLayer } 반환 */
+function drawChart(svg, xmax, ymax) {
   svg.setAttribute("viewBox", `0 0 ${VB.w} ${VB.h}`);
   svg.innerHTML = "";
-  const s = scales(ymax);
+  const s = scales(xmax, ymax);
   const grid = el("g", { class: "grid" }, svg);
   const ticksG = el("g", { class: "ticks" }, svg);
   const axis = el("g", { class: "axis" }, svg);
 
-  for (let x = tickStep(xMax); x <= xMax + 1e-9; x += tickStep(xMax)) {
+  for (let x = tickStep(xmax); x <= xmax + 1e-9; x += tickStep(xmax)) {
     el("line", { x1: s.px(x), y1: M.t, x2: s.px(x), y2: M.t + plotH }, grid);
     el("text", { x: s.px(x), y: M.t + plotH + 26, "text-anchor": "middle" }, ticksG)
       .textContent = fmt(x);
@@ -537,7 +573,7 @@ function drawChart(svg, ymax) {
   const trendLayer = el("g", { "clip-path": `url(#${clipId})` }, svg);
   const guideLayer = el("g", {}, svg);
   const ptLayer = el("g", {}, svg);
-  return { s, ptLayer, trendLayer, guideLayer };
+  return { s, xmax, ymax, ptLayer, trendLayer, guideLayer };
 }
 
 function drawPoint(layer, s, p, { ghost = false, pop = false, r = 9 } = {}) {
@@ -546,8 +582,16 @@ function drawPoint(layer, s, p, { ghost = false, pop = false, r = 9 } = {}) {
     cx: s.px(p.x), cy: s.py(p.y), r: ghost ? 6 : r,
     "transform-origin": `${s.px(p.x)}px ${s.py(p.y)}px`,
   }, layer);
-  c.style.fill = ghost ? "var(--text-muted)" : groupColor(p.g);
-  c.dataset.tip = `${CONFIG.groupNames[p.g]} · ${CONFIG.xLabel} ${fmt(p.x)}${CONFIG.xUnit} → ${CONFIG.yLabel} ${fmt(p.y)}${CONFIG.yUnit}`;
+  if (!ghost && p.s === 1) {                  // 2번째 계열은 링(○) 마커
+    c.style.fill = "var(--surface-1)";
+    c.style.stroke = groupColor(p.g);
+    c.style.strokeWidth = 4;
+  } else {
+    c.style.fill = ghost ? "var(--text-muted)" : groupColor(p.g);
+  }
+  c.dataset.key = `${p.g}:${p.i}:${p.s}`;
+  const sName = MODE === "dual" ? ` ${CONFIG.ySeries[p.s]}` : "";
+  c.dataset.tip = `${CONFIG.groupNames[p.g]}${sName} · ${CONFIG.xLabel} ${fmt(p.x)}${CONFIG.xUnit} → ${CONFIG.yLabel} ${fmt(p.y)}${CONFIG.yUnit}`;
   return c;
 }
 
@@ -568,23 +612,45 @@ function fitTrend(pts) {
   if (CONFIG.trendline === "proportional") {         // y = ax (원점 통과)
     let sxy = 0, sxx = 0;
     for (const p of pts) { sxy += p.x * p.y; sxx += p.x * p.x; }
-    return sxx ? { a: sxy / sxx, b: 0 } : null;
+    return sxx ? { type: "line", a: sxy / sxx, b: 0 } : null;
+  }
+  if (CONFIG.trendline === "inverse") {              // y = a / x^n (반비례)
+    const n = CONFIG.trendPower === 2 ? 2 : 1;
+    let syx = 0, sxx = 0;
+    for (const p of pts) {
+      if (p.x <= 0) continue;
+      const ix = 1 / Math.pow(p.x, n);
+      syx += p.y * ix; sxx += ix * ix;
+    }
+    return sxx ? { type: "inverse", a: syx / sxx, n } : null;
   }
   let sx = 0, sy = 0, sxy = 0, sxx = 0;              // y = ax + b
   for (const p of pts) { sx += p.x; sy += p.y; sxy += p.x * p.y; sxx += p.x * p.x; }
   const n = pts.length, d = n * sxx - sx * sx;
   if (!d) return null;
   const a = (n * sxy - sx * sy) / d;
-  return { a, b: (sy - a * sx) / n };
+  return { type: "line", a, b: (sy - a * sx) / n };
 }
 
-function drawTrendline(layer, s, fit, animate) {
+function drawTrendline(layer, chart, fit, animate) {
   layer.innerHTML = "";
   if (!fit) return;
-  const path = el("path", {
-    class: "trendline",
-    d: `M ${s.px(0)} ${s.py(fit.b)} L ${s.px(xMax)} ${s.py(fit.a * xMax + fit.b)}`,
-  }, layer);
+  const { s, xmax, ymax } = chart;
+  let d;
+  if (fit.type === "inverse") {
+    if (fit.a <= 0) return;                          // 반비례가 아닌 데이터
+    // 곡선이 y축 상단(ymax)을 뚫고 올라가는 지점부터 오른쪽 끝까지 표본화
+    const x0 = Math.max(Math.pow(fit.a / (ymax * 1.02), 1 / fit.n), xmax / 400);
+    const seg = [];
+    for (let k = 0; k <= 100; k++) {
+      const x = x0 + (xmax - x0) * (k / 100);
+      seg.push(`${k ? "L" : "M"} ${s.px(x)} ${s.py(fit.a / Math.pow(x, fit.n))}`);
+    }
+    d = seg.join(" ");
+  } else {
+    d = `M ${s.px(0)} ${s.py(fit.b)} L ${s.px(xmax)} ${s.py(fit.a * xmax + fit.b)}`;
+  }
+  const path = el("path", { class: "trendline", d }, layer);
   if (animate) {
     const len = path.getTotalLength();
     path.style.strokeDasharray = len;
@@ -612,9 +678,15 @@ function renderIntro() {
     `측정한 두 값이 만나는 곳에 점을 찍습니다`;
   const svg = $("#svg-intro");
   svg.classList.remove("draw-in");
-  drawChart(svg, yMaxNow());
+  drawChart(svg, xMaxNow(), yMaxNow());
   void svg.getBoundingClientRect();          // 리플로 → 애니메이션 재시작
   svg.classList.add("draw-in");
+}
+
+/* 그 행의 입력칸이 모두 채워졌는가 (행 하이라이트 기준) */
+function rowComplete(g, i) {
+  if (MODE === "fixed") return state.data[g][i] != null;
+  return state.data[g][i].every(v => v != null);
 }
 
 function renderGroup(g) {
@@ -623,17 +695,41 @@ function renderGroup(g) {
   scene.style.setProperty("--group-color", groupColor(g));
   scene.querySelector(".group-badge .swatch").style.background = groupColor(g);
   $("#group-name").textContent = CONFIG.groupNames[g];
+  scene.querySelector(".table-hint").textContent = MODE === "free"
+    ? "측정한 두 값을 모두 넣고 Enter — 표의 숫자가 그래프의 점이 됩니다"
+    : "값을 넣고 Enter — 표의 숫자가 그래프의 점이 됩니다";
 
-  // 표
+  // 표 (모드별 열 구성)
   const table = $("#group-table");
-  table.innerHTML =
-    `<tr><th>${CONFIG.xLabel}(${CONFIG.xUnit})</th><th>${CONFIG.yLabel}(${CONFIG.yUnit})</th></tr>` +
-    CONFIG.xValues.map((x, i) => `
-      <tr data-row="${i}" class="${state.data[g][i] != null ? "landed" : ""}">
-        <td class="x-cell">${fmt(x)}</td>
-        <td class="y-cell"><input type="number" min="0" step="any" inputmode="decimal"
-             data-i="${i}" value="${state.data[g][i] ?? ""}"></td>
-      </tr>`).join("");
+  table.className = "data-table" + (N >= 8 ? " compact" : "");
+  const inputCell = (i, f, val) =>
+    `<td class="y-cell"><input type="number" min="0" step="any" inputmode="decimal"
+        data-i="${i}" data-f="${f}" value="${val ?? ""}"></td>`;
+  const xHead = `<th>${CONFIG.xLabel}(${CONFIG.xUnit})</th>`;
+  const yHead = `<th>${CONFIG.yLabel}(${CONFIG.yUnit})</th>`;
+  let html;
+  if (MODE === "dual") {
+    html = `<tr>${xHead}<th>● ${CONFIG.ySeries[0]}</th><th>○ ${CONFIG.ySeries[1]}</th></tr>` +
+      CONFIG.xValues.map((x, i) => `
+        <tr class="${rowComplete(state.group, i) ? "landed" : ""}">
+          <td class="x-cell">${fmt(x)}</td>
+          ${inputCell(i, 0, state.data[g][i][0])}${inputCell(i, 1, state.data[g][i][1])}
+        </tr>`).join("");
+  } else if (MODE === "free") {
+    html = `<tr>${xHead}${yHead}</tr>` +
+      state.data[g].map((cell, i) => `
+        <tr class="${rowComplete(g, i) ? "landed" : ""}">
+          ${inputCell(i, 0, cell[0])}${inputCell(i, 1, cell[1])}
+        </tr>`).join("");
+  } else {
+    html = `<tr>${xHead}${yHead}</tr>` +
+      CONFIG.xValues.map((x, i) => `
+        <tr class="${rowComplete(g, i) ? "landed" : ""}">
+          <td class="x-cell">${fmt(x)}</td>
+          ${inputCell(i, 0, state.data[g][i])}
+        </tr>`).join("");
+  }
+  table.innerHTML = html;
   table.querySelectorAll("input").forEach(inp => {
     inp.addEventListener("keydown", e => {
       if (e.key === "Enter") { e.preventDefault(); commitInput(inp, true); }
@@ -643,46 +739,58 @@ function renderGroup(g) {
 
   // 그래프: 이전 조들은 회색 잔상, 이번 조는 제 색으로
   renderGroupChartOnly();
-  const firstEmpty = table.querySelector("tr:not(.landed) input");
+  const firstEmpty = [...table.querySelectorAll("input")].find(x => x.value === "");
   if (firstEmpty) firstEmpty.focus();
 }
 
 function commitInput(inp, fly) {
-  const g = state.group, i = +inp.dataset.i;
-  const prev = state.data[g][i];
+  const g = state.group, i = +inp.dataset.i, f = +inp.dataset.f;
+  const prev = getField(g, i, f);
   const v = inp.value.trim() === "" ? null : +inp.value;
   if (v !== null && (!isFinite(v) || v < 0)) {   // 음수·비정상값은 되돌림
     inp.value = prev ?? "";
     return;
   }
   if (v === prev) { if (fly) focusNextInput(inp); return; }
-  state.data[g][i] = v;
+  setField(g, i, f, v);
   saveData();
 
-  const row = inp.closest("tr");
-  row.classList.toggle("landed", v != null);
+  inp.closest("tr").classList.toggle("landed", rowComplete(g, i));
 
-  if (v != null && fly) inFlight.add(g + ":" + i);
+  // 이번 입력으로 (다시) 생긴 점 — 날리기 대상
+  const affected = [];
+  if (MODE === "dual") {
+    if (v != null) affected.push({ g, i, s: f, x: CONFIG.xValues[i], y: v });
+  } else if (MODE === "free") {
+    const [x, y] = state.data[g][i];
+    if (x != null && y != null) affected.push({ g, i, s: 0, x, y });
+  } else if (v != null) {
+    affected.push({ g, i, s: 0, x: CONFIG.xValues[i], y: v });
+  }
+
+  const keyOf = p => `${p.g}:${p.i}:${p.s}`;
+  if (fly) affected.forEach(p => inFlight.add(keyOf(p)));
   renderGroupChartOnly();                     // 축 확장 포함 재렌더
 
-  if (v != null && fly) {
-    const p = { g, x: CONFIG.xValues[i], y: v };
-    const target = findOwnCircle(i);
-    if (target) flyDot(inp.closest("td"), target, groupColor(g), () => {
-      inFlight.delete(g + ":" + i);
-      const c = findOwnCircle(i);             // 재렌더됐어도 현재 차트에서 다시 찾음
-      if (c) { c.style.opacity = ""; c.classList.add("pop"); }
-      drawGuides(groupChart.guideLayer, groupChart.s, p, groupColor(g));
-    });
+  if (fly) {
+    for (const p of affected) {
+      const key = keyOf(p);
+      const target = findOwnCircle(key);
+      if (!target) { inFlight.delete(key); continue; }
+      flyDot(inp.closest("td"), target, groupColor(g), () => {
+        inFlight.delete(key);
+        const c = findOwnCircle(key);         // 재렌더됐어도 현재 차트에서 다시 찾음
+        if (c) { c.style.opacity = ""; c.classList.add("pop"); }
+        drawGuides(groupChart.guideLayer, groupChart.s, p, groupColor(g));
+      });
+    }
     focusNextInput(inp);
   }
 }
 
-/* 현재 조 씬 차트에서 i번째 측정점의 (잔상 아닌) 원을 찾는다 */
-function findOwnCircle(i) {
-  const cx = groupChart.s.px(CONFIG.xValues[i]);
-  return [...groupChart.ptLayer.querySelectorAll("circle:not(.ghost)")]
-    .find(c => +c.getAttribute("cx") === cx);
+/* 현재 조 씬 차트에서 key(g:i:s)에 해당하는 (잔상 아닌) 원을 찾는다 */
+function findOwnCircle(key) {
+  return groupChart.ptLayer.querySelector(`circle:not(.ghost)[data-key="${key}"]`);
 }
 
 /* 아직 날아가는 중인 점은 착지 전까지 차트에서 숨긴다 */
@@ -691,11 +799,11 @@ const inFlight = new Set();
 function renderGroupChartOnly() {
   const g = state.group;
   const svg = $("#svg-group");
-  groupChart = drawChart(svg, yMaxNow());
+  groupChart = drawChart(svg, xMaxNow(), yMaxNow());
   for (const p of allPoints()) {
     if (p.g !== g) { drawPoint(groupChart.ptLayer, groupChart.s, p, { ghost: true }); continue; }
     const c = drawPoint(groupChart.ptLayer, groupChart.s, p);
-    if (inFlight.has(p.g + ":" + CONFIG.xValues.indexOf(p.x))) c.style.opacity = 0;
+    if (inFlight.has(c.dataset.key)) c.style.opacity = 0;
   }
 }
 
@@ -740,6 +848,18 @@ function renderSummary(animateTrend = false) {
     });
     legend.appendChild(btn);
   });
+  if (MODE === "dual") {                      // 계열 마커 안내 (토글 아님)
+    CONFIG.ySeries.forEach((name, si) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip info";
+      chip.disabled = true;
+      chip.innerHTML =
+        `<span class="swatch${si ? " ring" : ""}"` +
+        `${si ? "" : ' style="background:var(--text-secondary)"'}></span>${name}`;
+      legend.appendChild(chip);
+    });
+  }
   if (CONFIG.trendline) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -753,7 +873,7 @@ function renderSummary(animateTrend = false) {
   }
 
   const svg = $("#svg-summary");
-  const chart = drawChart(svg, yMaxNow());
+  const chart = drawChart(svg, xMaxNow(), yMaxNow());
   const pts = allPoints(true);
 
   // 조별로 시차를 두고 등장 (모이는 느낌)
@@ -768,9 +888,13 @@ function renderSummary(animateTrend = false) {
   const readout = $("#trend-readout");
   if (state.trendOn && CONFIG.trendline) {
     const fit = fitTrend(pts);
-    setTimeout(() => drawTrendline(chart.trendLayer, chart.s, fit, animateTrend),
+    setTimeout(() => drawTrendline(chart.trendLayer, chart, fit, animateTrend),
       G * 130 + 100);
-    if (fit) {
+    if (fit && fit.type === "inverse") {
+      readout.innerHTML =
+        `추세선: <b>${CONFIG.yLabel} ≈ ${fmt(fit.a)} ÷ ${CONFIG.xLabel}${fit.n === 2 ? "²" : ""}</b>` +
+        ` <span style="color:var(--text-muted)">(점 ${pts.length}개로 계산)</span>`;
+    } else if (fit) {
       const bTxt = CONFIG.trendline === "linear" && Math.abs(fit.b) > 1e-9
         ? ` ${fit.b >= 0 ? "+" : "−"} ${fmt(Math.abs(fit.b))}` : "";
       readout.innerHTML =
@@ -825,7 +949,7 @@ document.addEventListener("keydown", e => {
 
 $("#btn-reset").addEventListener("click", () => {
   if (!confirm("모든 조의 입력값을 지울까요? (다음 반 수업 시작)")) return;
-  state.data = Array.from({ length: G }, () => Array(N).fill(null));
+  state.data = emptyData();
   state.visible = Array(G).fill(true);
   state.trendOn = false;
   saveData();

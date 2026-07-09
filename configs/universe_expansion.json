@@ -1,0 +1,12 @@
+{
+  "slug": "universe_expansion",
+  "title": "풍선 우주 팽창 모형 (허블 법칙)",
+  "grade": "중2",
+  "wiki": "실험_풍선으로_알아보는_우주_팽창.md",
+  "xLabel": "처음 거리", "xUnit": "cm",
+  "yLabel": "크게 분 뒤 거리", "yUnit": "cm",
+  "xValues": [1.5, 3, 4.5, 6],
+  "trendline": "proportional",
+  "yMaxHint": 18,
+  "note": "제안값: 풍선 위 기준점에서 스티커까지 처음 거리 4점(1.5·6cm은 교과서값, 3·4.5cm 제안) 고정 → 크게 분 뒤 거리 측정. 원점 지나는 비례(처음 멀수록 더 많이 멀어짐)가 허블 법칙 모형."
+}

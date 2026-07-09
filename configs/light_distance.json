@@ -6,7 +6,8 @@
   "xLabel": "거리", "xUnit": "cm",
   "yLabel": "빛의 세기", "yUnit": "lx",
   "xValues": [20, 40, 60],
-  "trendline": false,
+  "trendline": "inverse",
+  "trendPower": 2,
   "yMaxHint": 150,
-  "note": "거리의 제곱에 반비례하는 곡선이라 점만 표시 (교과서 예시: 136·37·14 lx). 주변을 어둡게 하고 측정."
+  "note": "거리의 제곱에 반비례. 추세선 y=a÷x²로 곡선 추세를 보여줌 (교과서 예시: 136·37·14 lx). 주변을 어둡게 하고 측정."
 }

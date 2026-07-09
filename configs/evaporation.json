@@ -1,0 +1,14 @@
+{
+  "slug": "evaporation",
+  "title": "증발에 따른 질량 변화",
+  "grade": "중1",
+  "wiki": "실험_증발_현상_관찰.md",
+  "entryMode": "free",
+  "maxPoints": 6,
+  "xLabel": "시간", "xUnit": "분",
+  "yLabel": "질량", "yUnit": "g",
+  "xMaxHint": 5,
+  "yMaxHint": 20,
+  "trendline": false,
+  "note": "교과서에 측정표가 없어 시간을 정해 (시간, 질량) 쌍을 자유 입력(제안: 1분 간격). 증발로 질량이 서서히 줄어드는 감소 곡선."
+}

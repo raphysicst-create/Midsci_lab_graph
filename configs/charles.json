@@ -1,0 +1,14 @@
+{
+  "slug": "charles",
+  "title": "기체의 온도와 부피 관계",
+  "grade": "중1",
+  "wiki": "실험_기체의_온도와_부피_관계.md",
+  "entryMode": "free",
+  "maxPoints": 4,
+  "xLabel": "물의 온도", "xUnit": "℃",
+  "yLabel": "물방울 위치", "yUnit": "cm",
+  "xMaxHint": 50,
+  "trendline": "linear",
+  "yMaxHint": 15,
+  "note": "각 조가 (온도, 물방울 위치)를 자유 입력 — 2026-07-10 결정. 물방울 처음 위치가 조마다 달라 절편은 다를 수 있음: 점의 '기울기(오르는 정도)'가 비슷함을 보는 것이 초점."
+}

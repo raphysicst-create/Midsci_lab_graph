@@ -14,7 +14,8 @@ DIST = ROOT / "dist"
 MARK = re.compile(r"// __CONFIG_START__.*?// __CONFIG_END__", re.S)
 
 APP_FIELDS = ["title", "xLabel", "xUnit", "yLabel", "yUnit",
-              "xValues", "groupNames", "trendline", "yMaxHint"]
+              "xValues", "groupNames", "trendline", "yMaxHint",
+              "entryMode", "maxPoints", "xMaxHint", "ySeries", "trendPower"]
 REQUIRED = ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit",
             "xValues", "trendline", "yMaxHint", "grade"]
 DEFAULT_GROUPS = ["1조", "2조", "3조", "4조", "5조", "6조"]
@@ -25,14 +26,27 @@ def load_configs():
     cfgs = []
     for p in sorted((ROOT / "configs").glob("*.json")):
         cfg = json.loads(p.read_text(encoding="utf-8"))
-        errs = [k for k in REQUIRED if k not in cfg]
+        free = cfg.get("entryMode") == "free"
+        required = [k for k in REQUIRED if not (free and k == "xValues")]
+        errs = [k for k in required if k not in cfg]
         if errs:
             sys.exit(f"[오류] {p.name}: 필수 필드 누락 {errs}")
-        if cfg["trendline"] not in ("proportional", "linear", False):
-            sys.exit(f"[오류] {p.name}: trendline은 proportional|linear|false 여야 함")
-        if not (isinstance(cfg["xValues"], list) and len(cfg["xValues"]) >= 2
-                and all(isinstance(v, (int, float)) for v in cfg["xValues"])):
+        if cfg["trendline"] not in ("proportional", "linear", "inverse", False):
+            sys.exit(f"[오류] {p.name}: trendline은 proportional|linear|inverse|false 여야 함")
+        if cfg["trendline"] == "inverse" and cfg.get("trendPower") not in (None, 1, 2):
+            sys.exit(f"[오류] {p.name}: trendPower는 1 또는 2")
+        if free:
+            if "xMaxHint" not in cfg:
+                sys.exit(f"[오류] {p.name}: entryMode=free면 xMaxHint 필수")
+            if "ySeries" in cfg:
+                sys.exit(f"[오류] {p.name}: free 모드와 ySeries는 함께 쓸 수 없음")
+        elif not (isinstance(cfg["xValues"], list) and len(cfg["xValues"]) >= 2
+                  and all(isinstance(v, (int, float)) for v in cfg["xValues"])):
             sys.exit(f"[오류] {p.name}: xValues는 숫자 2개 이상의 리스트여야 함")
+        if "ySeries" in cfg and not (isinstance(cfg["ySeries"], list)
+                                     and len(cfg["ySeries"]) == 2
+                                     and all(isinstance(s, str) for s in cfg["ySeries"])):
+            sys.exit(f"[오류] {p.name}: ySeries는 문자열 2개 리스트 (마커 ●/○ 2계열만 지원)")
         if not re.fullmatch(r"[a-z0-9_]+", cfg["slug"]):
             sys.exit(f"[오류] {p.name}: slug는 소문자·숫자·밑줄만 ({cfg['slug']})")
         if p.stem != cfg["slug"]:
@@ -60,7 +74,10 @@ def build_app(template, cfg):
     return out
 
 
-def trend_label(t):
+def trend_label(cfg):
+    t = cfg["trendline"]
+    if t == "inverse":
+        return "반비례 곡선(y=a÷x²)" if cfg.get("trendPower") == 2 else "반비례 곡선(y=a÷x)"
     return {"proportional": "비례(원점 통과)", "linear": "직선(절편)", False: "점만(추세선 없음)"}[t]
 
 
@@ -69,12 +86,14 @@ def build_index(cfgs):
     rows_by_grade = {}
     for c in cfgs:
         note = f'<div class="note">{c["note"]}</div>' if c.get("note") else ""
-        xv = ", ".join(str(v) for v in c["xValues"])
+        xv = ("자유 입력" if c.get("entryMode") == "free"
+              else ", ".join(str(v) for v in c["xValues"]))
+        series = f' [{c["ySeries"][0]}·{c["ySeries"][1]}]' if c.get("ySeries") else ""
         rows_by_grade.setdefault(c["grade"], []).append(
             f'<a class="card" href="./{c["slug"]}.html">'
             f'<h3>{c["title"]}</h3>'
-            f'<p>{c["xLabel"]}({c["xUnit"]}) {xv} → {c["yLabel"]}({c["yUnit"]})</p>'
-            f'<p class="trend">{trend_label(c["trendline"])}</p>{note}</a>')
+            f'<p>{c["xLabel"]}({c["xUnit"]}) {xv} → {c["yLabel"]}({c["yUnit"]}){series}</p>'
+            f'<p class="trend">{trend_label(c)}</p>{note}</a>')
     sections = "\n".join(
         f'<h2>{g}</h2>\n<div class="grid">\n' + "\n".join(rows) + "\n</div>"
         for g, rows in rows_by_grade.items())

@@ -1,0 +1,14 @@
+{
+  "slug": "density",
+  "title": "물체의 부피와 질량 (밀도)",
+  "grade": "중2",
+  "wiki": "실험_밀도_측정.md",
+  "entryMode": "free",
+  "maxPoints": 6,
+  "xLabel": "부피", "xUnit": "cm³",
+  "yLabel": "질량", "yUnit": "g",
+  "xMaxHint": 20,
+  "yMaxHint": 160,
+  "trendline": "proportional",
+  "note": "물체마다 부피가 달라 x 고정 불가 — 각 조가 서로 다른 물체의 (부피, 질량)을 자유 입력. 같은 물질이면 원점 지나는 직선 위에 모이고 기울기가 밀도."
+}

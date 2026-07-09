@@ -352,14 +352,16 @@ text.pt-label {
    ============================================================ */
 // __CONFIG_START__
 const CONFIG = {
-  title: "종이 헬리콥터의 날개 길이와 낙하 시간",
-  xLabel: "날개 길이",
-  xUnit: "cm",
-  yLabel: "낙하 시간(3회 평균)",
-  yUnit: "초",
-  xValues: [4, 6, 8.5, 11],
+  title: "기체의 온도와 부피 관계",
+  xLabel: "물의 온도",
+  xUnit: "℃",
+  yLabel: "물방울 위치",
+  yUnit: "cm",
   trendline: "linear",
-  yMaxHint: 3,
+  yMaxHint: 15,
+  entryMode: "free",
+  maxPoints: 4,
+  xMaxHint: 50,
   groupNames: ["1조", "2조", "3조", "4조", "5조", "6조"],
 };
 // __CONFIG_END__
