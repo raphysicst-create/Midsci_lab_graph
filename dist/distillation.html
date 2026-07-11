@@ -1,13 +1,44 @@
 <!DOCTYPE html>
+<!-- ============================================================
+  조별 실험 그래프 — HTML 뼈대 (소스)
+
+  ◆ 빌드 구조
+    src/skeleton.html  ← 이 파일. HTML 구조 + 실험 설정(CONFIG) 마커
+    src/template.css   → 아래 <style> 자리(__CSS_INLINE__)에 인라인됨
+    src/template.js    → 맨 아래 <script> 자리(__JS_INLINE__)에 인라인됨
+    `py build.py` 실행 → template.html(조립본) + dist/<실험>.html 생성
+
+  ◆ 다른 HTML 프레젠테이션(슬라이드)에 넣는 3가지 방법 (쉬운 순)
+    1) iframe — 슬라이드 안에 한 줄:
+       <iframe src="dist/실험이름.html" style="width:100%;height:100%;border:0"></iframe>
+    2) 통째 사용 — dist/의 앱은 의존성 없는 단일 HTML이므로
+       파일 하나를 그대로 "한 슬라이드"로 링크하거나 복사해 쓴다.
+    3) 부분 이식 — 아래 4덩이를 순서대로 대상 문서에 복사:
+       ① <style> 전체  ② CONFIG <script>  ③ <header>~<div id="toast"> 마크업
+       ④ 마지막 <script> 전체.  전역 CSS 충돌만 주의(선택자가 평범한 클래스임).
+  ============================================================ -->
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>조별 실험 그래프 — 용수철의 탄성력 측정</title>
+<title>조별 실험 그래프</title>
 <style>
 /* ============================================================
-   디자인 토큰 — 나중에 디자인을 입힐 때 이 블록만 교체하면 됨.
-   색·폰트·크기는 전부 여기서만 정의한다.
+   조별 실험 그래프 — 스타일 (소스: src/template.css)
+
+   구성 순서:
+   1. 디자인 토큰(색·폰트) — 라이트 / 다크(OS 추종) / 다크(수동 토글)
+   2. 뼈대 레이아웃 (헤더·씬·내비게이션)
+   3. 씬별 UI (도입·입력 표·종합 범례)
+   4. SVG 차트 (축·점·추세선)
+   5. 애니메이션 + prefers-reduced-motion 대응
+   6. 툴팁·토스트
+   ============================================================ */
+
+/* ============================================================
+   1. 디자인 토큰 — 디자인을 바꿀 땐 이 블록(+아래 다크 2블록)만 교체.
+   조별 6색은 색약 검증(인접 CVD ΔE ≥ 12)을 통과한 팔레트 — 순서 고정,
+   순환 금지, 임의 교체 금지 (dataviz validate_palette.js로 재검증할 것).
    ============================================================ */
 :root {
   /* 표면·잉크 */
@@ -19,7 +50,7 @@
   --gridline:       #e1e0d9;
   --axisline:       #c3c2b7;
   --border:         rgba(11,11,11,0.10);
-  /* 조별 색 (검증된 카테고리 팔레트 — 순서 고정, 순환 금지) */
+  /* 조별 색 */
   --series-1: #2a78d6;  /* blue   */
   --series-2: #1baf7a;  /* aqua   */
   --series-3: #eda100;  /* yellow */
@@ -37,8 +68,9 @@
   --fs-axis-label: 21px;
   --radius: 12px;
 }
+/* 다크 토큰 A — OS 설정 추종 (🌓 버튼으로 라이트를 고정하면 제외) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --surface-1:      #1a1a19;
     --page:           #0d0d0d;
     --text-primary:   #ffffff;
@@ -56,9 +88,27 @@
     --trend:    #ffffff;
   }
 }
+/* 다크 토큰 B — 🌓 버튼으로 수동 지정. ⚠ 위 A 블록과 값을 항상 똑같이 유지 */
+:root[data-theme="dark"] {
+  --surface-1:      #1a1a19;
+  --page:           #0d0d0d;
+  --text-primary:   #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted:     #898781;
+  --gridline:       #2c2c2a;
+  --axisline:       #383835;
+  --border:         rgba(255,255,255,0.10);
+  --series-1: #3987e5;
+  --series-2: #199e70;
+  --series-3: #c98500;
+  --series-4: #008300;
+  --series-5: #9085e9;
+  --series-6: #e66767;
+  --trend:    #ffffff;
+}
 
 /* ============================================================
-   뼈대 레이아웃 — 시맨틱 구조. 프레젠테이션 프레임에 이식 가능.
+   2. 뼈대 레이아웃 — 시맨틱 구조. 프레젠테이션 프레임에 이식 가능.
    ============================================================ */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
@@ -113,6 +163,21 @@ section.scene.active { display: flex; opacity: 1; }
 }
 .scene-sub { color: var(--text-secondary); margin-bottom: 18px; }
 .scene-body { flex: 1; display: flex; gap: 36px; min-height: 0; }
+
+/* 작은 보조 버튼 (조별 씬 "이 조 지우기" 등) */
+button.mini-btn {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 12px;
+  margin-left: 14px;
+  cursor: pointer;
+}
+button.mini-btn:hover { color: var(--text-primary); }
 
 /* --- 도입 씬 --- */
 #scene-intro { align-items: center; justify-content: center; text-align: center; }
@@ -255,7 +320,9 @@ nav.deck-nav .dots button {
 }
 nav.deck-nav .dots button.on { background: var(--text-secondary); }
 
-/* --- SVG 차트 --- */
+/* ============================================================
+   4. SVG 차트
+   ============================================================ */
 .grid line { stroke: var(--gridline); stroke-width: 1; }
 .axis line { stroke: var(--axisline); stroke-width: 1.5; }
 .axis text, .ticks text {
@@ -272,6 +339,26 @@ nav.deck-nav .dots button.on { background: var(--text-secondary); }
 }
 circle.pt { stroke: var(--surface-1); stroke-width: 2; }
 circle.pt.ghost { opacity: .35; }
+/* 키보드 포커스된 점은 굵은 테두리로 표시 (툴팁도 함께 뜸) */
+circle.pt:focus-visible { outline: none; stroke: var(--text-primary); stroke-width: 3.5; }
+path.trendline {
+  fill: none;
+  stroke: var(--trend);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+/* smooth 모드 2번째 계열(○) 곡선은 점선으로 구분 */
+path.trendline.dashed { stroke-dasharray: 12 10; }
+text.pt-label {
+  font-family: var(--font);
+  font-size: 16px;
+  font-weight: 600;
+  fill: var(--text-secondary);
+}
+
+/* ============================================================
+   5. 애니메이션
+   ============================================================ */
 circle.pt.pop { animation: pop .45s ease; }
 @keyframes pop {
   0% { transform: scale(0); }
@@ -289,18 +376,6 @@ line.guide {
   70% { opacity: .8; }
   100% { opacity: 0; }
 }
-path.trendline {
-  fill: none;
-  stroke: var(--trend);
-  stroke-width: 3;
-  stroke-linecap: round;
-}
-text.pt-label {
-  font-family: var(--font);
-  font-size: 16px;
-  font-weight: 600;
-  fill: var(--text-secondary);
-}
 
 /* 도입 씬 축 드로잉 애니메이션 */
 .draw-in line.axis-line {
@@ -316,7 +391,7 @@ text.pt-label {
 }
 @keyframes fade-in { to { opacity: 1; } }
 
-/* 표 → 그래프로 날아가는 점 */
+/* 표 → 그래프로 날아가는 점 (JS flyDot이 생성) */
 .fly-dot {
   position: fixed;
   width: 18px; height: 18px;
@@ -327,7 +402,19 @@ text.pt-label {
   transition: transform .8s cubic-bezier(.25,.7,.3,1);
 }
 
-/* 툴팁 */
+/* 접근성: 움직임 줄이기 설정이면 애니메이션 없이 즉시 최종 상태를 보여준다.
+   (점 비행은 JS에서 REDUCED_MOTION으로 건너뜀 — 여기선 CSS 애니메이션만 정리) */
+@media (prefers-reduced-motion: reduce) {
+  section.scene { transition: none; }
+  circle.pt.pop { animation: none; }
+  line.guide { animation: none; opacity: .8; }  /* 안내선은 사라지지 않고 유지 */
+  .draw-in line.axis-line { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; }
+  .draw-in .axis-label, .draw-in .ticks text { animation: none; opacity: 1; }
+}
+
+/* ============================================================
+   6. 툴팁·토스트
+   ============================================================ */
 #tooltip {
   position: fixed;
   pointer-events: none;
@@ -339,6 +426,34 @@ text.pt-label {
   z-index: 100;
   display: none;
   white-space: nowrap;
+}
+
+/* 지우기 되돌리기 토스트 — 화면 아래 중앙, 5초 뒤 자동으로 사라짐 */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 78px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--text-primary);
+  color: var(--surface-1);
+  font-size: 17px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  z-index: 100;
+}
+#toast[hidden] { display: none; }
+#toast button {
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 4px 12px;
+  cursor: pointer;
 }
 </style>
 </head>
@@ -352,32 +467,43 @@ text.pt-label {
    ============================================================ */
 // __CONFIG_START__
 const CONFIG = {
+  slug: "distillation",
   title: "혼합물 증류 시 온도 변화",
   xLabel: "시간",
   xUnit: "분",
   yLabel: "온도",
   yUnit: "℃",
   xValues: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
-  trendline: false,
+  trendline: "smooth",
   yMaxHint: 110,
   groupNames: ["1조", "2조", "3조", "4조", "5조", "6조"],
 };
 // __CONFIG_END__
 
-/* 선택 필드 (생략하면 비활성):
+/* trendline 종류:
+   "proportional" — 원점 통과 직선 y=ax (최소제곱)
+   "linear"       — 직선 y=ax+b (최소제곱)
+   "inverse"      — 반비례 곡선 y=a/xⁿ (trendPower: 1|2, 기본 1)
+   "smooth"       — 각 x의 학급 평균을 부드럽게 이은 곡선 (플래토·수렴 등
+                    수식으로 적합할 수 없는 모양용. dual 모드면 계열별 2곡선)
+   false          — 추세선 없음 (점만)
+
+   선택 필드 (생략하면 비활성):
    entryMode: "free"     — 각 조가 (x, y) 쌍을 자유 입력. xValues 무시, xMaxHint 필수
    maxPoints: 5          — free 모드에서 조당 입력 행 수 (기본 5)
    xMaxHint: 50          — free 모드 가로축 시작 최댓값 (데이터가 넘으면 자동 확장)
    ySeries: ["뜨거운 물", "찬 물"]
                          — 고정 x에서 조당 y 2계열 입력 (●=1번째, ○=2번째 마커)
-   trendline: "inverse" (+ trendPower: 1|2)
-                         — 반비례 곡선 y = a/x 또는 a/x² 추세선
 */
 </script>
 
+<!-- 상단 바: 제목 + 도구 버튼 (내보내기·테마·전체화면·지우기) -->
 <header class="app-bar">
   <span id="bar-title"></span>
   <span class="spacer"></span>
+  <button id="btn-csv" type="button" title="측정값을 CSV(엑셀)로 저장">⬇ CSV</button>
+  <button id="btn-png" type="button" title="종합 그래프를 그림(PNG)으로 저장">⬇ 그림</button>
+  <button id="btn-theme" type="button" aria-label="밝은/어두운 테마 전환">🌓</button>
   <button id="btn-fullscreen" type="button">⛶ 전체화면</button>
   <button id="btn-reset" type="button">전체 지우기</button>
 </header>
@@ -396,6 +522,7 @@ const CONFIG = {
     <div class="scene-title group-badge">
       <span class="swatch"></span><span id="group-name"></span>
       <span style="font-weight:400; font-size:22px; color:var(--text-secondary)">측정 결과</span>
+      <button class="mini-btn" id="btn-clear-group" type="button">이 조 지우기</button>
     </div>
     <div class="scene-body">
       <div class="table-card">
@@ -424,12 +551,44 @@ const CONFIG = {
   <button class="nav-btn" id="btn-next" type="button">다음 ▶</button>
 </nav>
 
+<!-- 점 위 마우스·포커스·탭에 뜨는 값 표시 -->
 <div id="tooltip"></div>
+
+<!-- 지우기 직후 잠깐 뜨는 되돌리기 안내 -->
+<div id="toast" role="status" hidden>
+  <span id="toast-msg"></span>
+  <button id="btn-undo" type="button">되돌리기</button>
+</div>
 
 <script>
 "use strict";
 /* ============================================================
-   상태
+   조별 실험 그래프 — 메인 스크립트 (소스: src/template.js)
+
+   ◆ 파일 지도 — 무엇을 고치려면 어디를 보나
+   §1 환경·상태·저장   조 수(G)·입력 모드(MODE)·localStorage 읽고 쓰기
+   §2 좌표계·축        SVG 좌표 변환, 눈금 계산, 빈 차트 그리기(drawChart)
+   §3 점 그리기        drawPoint(마커·툴팁 데이터), 안내선(drawGuides)
+   §4 추세선           fitTrend(수식 적합) / smooth(평균 곡선) / drawTrend
+   §5 씬 렌더링        도입(renderIntro)·조별(renderGroup)·종합(renderSummary)
+   §6 내보내기         CSV(exportCSV)·PNG(exportPNG)
+   §7 지우기·되돌리기  doClear + 토스트(undo)
+   §8 내비게이션·전역  씬 전환, 키보드, 테마 토글, 툴팁
+
+   ◆ 자주 하는 수정
+   - 추세선 종류 추가: §4 computeTrend·drawTrend·trendReadout 세 곳
+     + build.py의 trendline 화이트리스트·trend_label + config.schema.json
+   - 입력 모드 추가: MODE 판정(§1) → allPoints(§1) → 표 생성(renderGroup §5)
+   - 데이터 저장 형식: emptyCell/loadData(§1)의 주석 참조 (모드별 셀 모양)
+
+   ◆ 전제
+   - CONFIG 전역 객체가 이 스크립트보다 먼저 선언돼 있어야 한다
+     (skeleton.html의 __CONFIG_START__ 블록. build.py가 실험별로 치환).
+   - 외부 라이브러리 없음. 이 파일 하나가 앱 로직 전부다.
+   ============================================================ */
+
+/* ============================================================
+   §1 환경·상태·저장
    ============================================================ */
 const G = CONFIG.groupNames.length;          // 조 수
 /* 입력 모드: fixed(고정 x, y 1개) | dual(고정 x, y 2계열) | free(x·y 자유 입력) */
@@ -437,11 +596,23 @@ const MODE = CONFIG.entryMode === "free" ? "free"
   : (Array.isArray(CONFIG.ySeries) && CONFIG.ySeries.length === 2 ? "dual" : "fixed");
 const N = MODE === "free" ? (CONFIG.maxPoints || 5) : CONFIG.xValues.length;   // 행 수
 const SCENES = 1 + G + 1;                    // 도입 + 조별 + 종합
-const STORE_KEY = "group_graph::" + CONFIG.title;
+
+/* OS "움직임 줄이기" 설정 — 켜져 있으면 점 비행·드로잉 애니메이션을 건너뜀 */
+const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* 저장 키는 slug 기반 (제목을 다듬어도 데이터가 유지되도록).
+   예전 버전은 제목 기반 키였으므로 있으면 1회 옮겨온다. */
+const STORE_KEY = "group_graph::" + (CONFIG.slug || CONFIG.title);
+const LEGACY_KEY = "group_graph::" + CONFIG.title;
+if (LEGACY_KEY !== STORE_KEY && !localStorage.getItem(STORE_KEY)) {
+  const legacy = localStorage.getItem(LEGACY_KEY);
+  if (legacy) localStorage.setItem(STORE_KEY, legacy);
+}
 
 /* 저장 셀 모양 — fixed: y값|null, dual: [y1,y2], free: [x,y] */
 const emptyCell = () => (MODE === "fixed" ? null : [null, null]);
-const emptyData = () => Array.from({ length: G }, () => Array.from({ length: N }, emptyCell));
+const emptyRow = () => Array.from({ length: N }, emptyCell);
+const emptyData = () => Array.from({ length: G }, emptyRow);
 
 const state = {
   scene: 0,
@@ -461,7 +632,7 @@ function loadData() {
     if (Array.isArray(raw) && raw.length === G &&
         raw.every(r => Array.isArray(r) && r.length === N && r.every(cellOk)))
       return raw;
-  } catch (e) { /* 무시하고 초기화 */ }
+  } catch (e) { /* 깨진 저장값은 무시하고 초기화 */ }
   return emptyData();
 }
 function saveData() { localStorage.setItem(STORE_KEY, JSON.stringify(state.data)); }
@@ -473,7 +644,7 @@ function setField(g, i, f, v) {
 }
 
 const groupColor = g => `var(--series-${g + 1})`;
-/* 점 목록 — {g, i, s(계열), x, y}. free는 x·y 둘 다 있어야 점이 된다 */
+/* 점 목록 — {g(조), i(행), s(계열), x, y}. free는 x·y 둘 다 있어야 점이 된다 */
 const allPoints = (visibleOnly = false) => {
   const pts = [];
   state.data.forEach((row, g) => {
@@ -492,10 +663,10 @@ const allPoints = (visibleOnly = false) => {
 };
 
 /* ============================================================
-   좌표계·축
+   §2 좌표계·축
    ============================================================ */
-const VB = { w: 920, h: 620 };
-const M = { l: 90, r: 30, t: 24, b: 78 };    // 여백
+const VB = { w: 920, h: 620 };               // SVG viewBox 크기 (PNG 내보내기 기준 크기)
+const M = { l: 90, r: 30, t: 24, b: 78 };    // 플롯 여백
 const plotW = VB.w - M.l - M.r, plotH = VB.h - M.t - M.b;
 
 function niceCeil(v) {                        // 보기 좋은 값으로 올림
@@ -519,6 +690,7 @@ function yMaxNow() {
   const ys = allPoints().map(p => p.y);
   return niceCeil(Math.max(CONFIG.yMaxHint || 1, ...(ys.length ? ys : [0]).map(v => v * 1.12)));
 }
+/* 데이터 값 → SVG 좌표 변환 함수 쌍 (px: x→가로, py: y→세로) */
 const scales = (xmax, ymax) => ({
   px: x => M.l + (x / xmax) * plotW,
   py: y => M.t + plotH - (y / ymax) * plotH,
@@ -536,6 +708,9 @@ function fmt(v) { return (+v.toFixed(2)).toLocaleString("ko-KR"); }
 /* 축·격자·라벨을 그리고 { s, xmax, ymax, ptLayer, trendLayer, guideLayer } 반환 */
 function drawChart(svg, xmax, ymax) {
   svg.setAttribute("viewBox", `0 0 ${VB.w} ${VB.h}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label",
+    `${CONFIG.title} 그래프 — 가로축 ${CONFIG.xLabel}(${CONFIG.xUnit}), 세로축 ${CONFIG.yLabel}(${CONFIG.yUnit})`);
   svg.innerHTML = "";
   const s = scales(xmax, ymax);
   const grid = el("g", { class: "grid" }, svg);
@@ -575,6 +750,9 @@ function drawChart(svg, xmax, ymax) {
   return { s, xmax, ymax, ptLayer, trendLayer, guideLayer };
 }
 
+/* ============================================================
+   §3 점 그리기
+   ============================================================ */
 function drawPoint(layer, s, p, { ghost = false, pop = false, r = 9 } = {}) {
   const c = el("circle", {
     class: "pt" + (ghost ? " ghost" : "") + (pop ? " pop" : ""),
@@ -591,6 +769,10 @@ function drawPoint(layer, s, p, { ghost = false, pop = false, r = 9 } = {}) {
   c.dataset.key = `${p.g}:${p.i}:${p.s}`;
   const sName = MODE === "dual" ? ` ${CONFIG.ySeries[p.s]}` : "";
   c.dataset.tip = `${CONFIG.groupNames[p.g]}${sName} · ${CONFIG.xLabel} ${fmt(p.x)}${CONFIG.xUnit} → ${CONFIG.yLabel} ${fmt(p.y)}${CONFIG.yUnit}`;
+  if (!ghost) {                               // 키보드(Tab)·스크린리더로도 점 값에 접근
+    c.setAttribute("tabindex", "0");
+    c.setAttribute("aria-label", c.dataset.tip);
+  }
   return c;
 }
 
@@ -604,16 +786,19 @@ function drawGuides(layer, s, p, color) {
 }
 
 /* ============================================================
-   추세선 (최소제곱)
+   §4 추세선
+   두 갈래: (a) 수식 적합(fitTrend) — proportional/linear/inverse,
+            (b) 평균 곡선(smooth) — 각 x의 학급 평균을 단조 3차 곡선으로 연결
+   computeTrend가 CONFIG.trendline에 따라 골라 통일된 형태로 반환한다.
    ============================================================ */
-function fitTrend(pts) {
+function fitTrend(pts) {                       // 최소제곱 (closed-form)
   if (pts.length < 2) return null;
-  if (CONFIG.trendline === "proportional") {         // y = ax (원점 통과)
+  if (CONFIG.trendline === "proportional") {   // y = ax (원점 통과)
     let sxy = 0, sxx = 0;
     for (const p of pts) { sxy += p.x * p.y; sxx += p.x * p.x; }
     return sxx ? { type: "line", a: sxy / sxx, b: 0 } : null;
   }
-  if (CONFIG.trendline === "inverse") {              // y = a / x^n (반비례)
+  if (CONFIG.trendline === "inverse") {        // y = a / x^n (반비례)
     const n = CONFIG.trendPower === 2 ? 2 : 1;
     let syx = 0, sxx = 0;
     for (const p of pts) {
@@ -623,7 +808,7 @@ function fitTrend(pts) {
     }
     return sxx ? { type: "inverse", a: syx / sxx, n } : null;
   }
-  let sx = 0, sy = 0, sxy = 0, sxx = 0;              // y = ax + b
+  let sx = 0, sy = 0, sxy = 0, sxx = 0;        // y = ax + b
   for (const p of pts) { sx += p.x; sy += p.y; sxy += p.x * p.y; sxx += p.x * p.x; }
   const n = pts.length, d = n * sxx - sx * sx;
   if (!d) return null;
@@ -631,13 +816,93 @@ function fitTrend(pts) {
   return { type: "line", a, b: (sy - a * sx) / n };
 }
 
-function drawTrendline(layer, chart, fit, animate) {
+/* smooth 1단계: 같은 x(허용 오차 안)의 y를 평균 → x 오름차순 [{x,y}] */
+function smoothAverages(pts) {
+  const sorted = [...pts].sort((a, b) => a.x - b.x);
+  const tol = xMaxNow() * 0.02;               // 이 간격 안의 x는 같은 측정점으로 취급
+  const bins = [];
+  for (const p of sorted) {
+    const last = bins[bins.length - 1];
+    if (last && p.x - last.x0 <= tol) { last.sx += p.x; last.sy += p.y; last.n++; }
+    else bins.push({ x0: p.x, sx: p.x, sy: p.y, n: 1 });
+  }
+  return bins.map(b => ({ x: b.sx / b.n, y: b.sy / b.n }));
+}
+
+/* smooth 2단계: 단조 3차 보간(Fritsch–Carlson) 접선 — 점 사이에서
+   출렁이거나(overshoot) 데이터 범위를 벗어나지 않는 부드러운 곡선을 보장 */
+function monotoneTangents(P) {
+  const n = P.length, m = [], t = [];
+  for (let i = 0; i < n - 1; i++) m.push((P[i + 1].y - P[i].y) / (P[i + 1].x - P[i].x));
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = (m[i - 1] * m[i] <= 0) ? 0 : (m[i - 1] + m[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {            // 단조성 제한
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+    const a = t[i] / m[i], b = t[i + 1] / m[i], h = Math.hypot(a, b);
+    if (h > 3) { t[i] = m[i] * 3 * a / h; t[i + 1] = m[i] * 3 * b / h; }
+  }
+  return t;
+}
+
+/* smooth 3단계: 접선 → SVG 베지어 경로 문자열 (s는 좌표 변환) */
+function smoothPathD(P, s) {
+  const t = monotoneTangents(P);
+  let d = `M ${s.px(P[0].x)} ${s.py(P[0].y)}`;
+  for (let i = 0; i < P.length - 1; i++) {
+    const dx = P[i + 1].x - P[i].x;
+    d += ` C ${s.px(P[i].x + dx / 3)} ${s.py(P[i].y + t[i] * dx / 3)},`
+      + ` ${s.px(P[i + 1].x - dx / 3)} ${s.py(P[i + 1].y - t[i + 1] * dx / 3)},`
+      + ` ${s.px(P[i + 1].x)} ${s.py(P[i + 1].y)}`;
+  }
+  return d;
+}
+
+/* 추세 계산 결과를 한 형태로: {kind:"fit", fit} | {kind:"smooth", curves:[{s,P}]} | null */
+function computeTrend(pts) {
+  if (!CONFIG.trendline) return null;
+  if (CONFIG.trendline === "smooth") {
+    const seriesCount = MODE === "dual" ? 2 : 1;
+    const curves = [];
+    for (let s = 0; s < seriesCount; s++) {
+      const P = smoothAverages(pts.filter(p => p.s === s));
+      if (P.length >= 2) curves.push({ s, P });   // 곡선엔 서로 다른 x 2개 이상 필요
+    }
+    return curves.length ? { kind: "smooth", curves } : null;
+  }
+  const fit = fitTrend(pts);
+  return fit ? { kind: "fit", fit } : null;
+}
+
+function drawTrend(layer, chart, trend, animate) {
   layer.innerHTML = "";
-  if (!fit) return;
+  if (!trend) return;
+  if (REDUCED_MOTION) animate = false;
   const { s, xmax, ymax } = chart;
-  let d;
+
+  const addPath = (d, dashed) => {
+    const path = el("path", { class: "trendline" + (dashed ? " dashed" : "") }, layer);
+    path.setAttribute("d", d);
+    if (!animate) return;
+    if (dashed) {                              // 점선은 dashoffset 기법과 충돌 → 페이드인
+      path.style.opacity = 0;
+      path.style.transition = "opacity 1.2s ease";
+      requestAnimationFrame(() => requestAnimationFrame(() => { path.style.opacity = 1; }));
+    } else {                                   // 실선은 그려지는 드로잉 애니메이션
+      const len = path.getTotalLength();
+      path.style.strokeDasharray = len;
+      path.style.strokeDashoffset = len;
+      path.style.transition = "stroke-dashoffset 1.4s ease";
+      requestAnimationFrame(() => requestAnimationFrame(() => { path.style.strokeDashoffset = 0; }));
+    }
+  };
+
+  if (trend.kind === "smooth") {
+    for (const c of trend.curves) addPath(smoothPathD(c.P, s), c.s === 1);
+    return;
+  }
+  const fit = trend.fit;
   if (fit.type === "inverse") {
-    if (fit.a <= 0) return;                          // 반비례가 아닌 데이터
+    if (fit.a <= 0) return;                    // 반비례가 아닌 데이터
     // 곡선이 y축 상단(ymax)을 뚫고 올라가는 지점부터 오른쪽 끝까지 표본화
     const x0 = Math.max(Math.pow(fit.a / (ymax * 1.02), 1 / fit.n), xmax / 400);
     const seg = [];
@@ -645,22 +910,33 @@ function drawTrendline(layer, chart, fit, animate) {
       const x = x0 + (xmax - x0) * (k / 100);
       seg.push(`${k ? "L" : "M"} ${s.px(x)} ${s.py(fit.a / Math.pow(x, fit.n))}`);
     }
-    d = seg.join(" ");
+    addPath(seg.join(" "), false);
   } else {
-    d = `M ${s.px(0)} ${s.py(fit.b)} L ${s.px(xmax)} ${s.py(fit.a * xmax + fit.b)}`;
-  }
-  const path = el("path", { class: "trendline", d }, layer);
-  if (animate) {
-    const len = path.getTotalLength();
-    path.style.strokeDasharray = len;
-    path.style.strokeDashoffset = len;
-    path.style.transition = "stroke-dashoffset 1.4s ease";
-    requestAnimationFrame(() => requestAnimationFrame(() => { path.style.strokeDashoffset = 0; }));
+    addPath(`M ${s.px(0)} ${s.py(fit.b)} L ${s.px(xmax)} ${s.py(fit.a * xmax + fit.b)}`, false);
   }
 }
 
+/* 종합 씬 아래에 추세선을 말로 읽어주는 문구 */
+function trendReadout(trend, ptCount) {
+  const tail = ` <span style="color:var(--text-muted)">(점 ${ptCount}개로 계산)</span>`;
+  if (!trend) return "점이 2개 이상 있어야 추세선을 그릴 수 있습니다";
+  if (trend.kind === "smooth") {
+    const what = MODE === "dual"
+      ? `<b>● ${CONFIG.ySeries[0]}</b>: 실선 · <b>○ ${CONFIG.ySeries[1]}</b>: 점선`
+      : "";
+    return `추세선: 각 ${CONFIG.xLabel}에서 <b>학급 평균</b>을 부드럽게 이은 곡선${what ? " — " + what : ""}${tail}`;
+  }
+  const fit = trend.fit;
+  if (fit.type === "inverse") {
+    return `추세선: <b>${CONFIG.yLabel} ≈ ${fmt(fit.a)} ÷ ${CONFIG.xLabel}${fit.n === 2 ? "²" : ""}</b>${tail}`;
+  }
+  const bTxt = CONFIG.trendline === "linear" && Math.abs(fit.b) > 1e-9
+    ? ` ${fit.b >= 0 ? "+" : "−"} ${fmt(Math.abs(fit.b))}` : "";
+  return `추세선: <b>${CONFIG.yLabel} ≈ ${fmt(fit.a)} × ${CONFIG.xLabel}${bTxt}</b>${tail}`;
+}
+
 /* ============================================================
-   씬 렌더링
+   §5 씬 렌더링
    ============================================================ */
 const $ = sel => document.querySelector(sel);
 const sceneEls = {
@@ -767,24 +1043,25 @@ function commitInput(inp, fly) {
     affected.push({ g, i, s: 0, x: CONFIG.xValues[i], y: v });
   }
 
+  const animate = fly && !REDUCED_MOTION;      // 움직임 줄이기면 비행 없이 즉시 반영
   const keyOf = p => `${p.g}:${p.i}:${p.s}`;
-  if (fly) affected.forEach(p => inFlight.add(keyOf(p)));
-  renderGroupChartOnly();                     // 축 확장 포함 재렌더
+  if (animate) affected.forEach(p => inFlight.add(keyOf(p)));
+  renderGroupChartOnly();                      // 축 확장 포함 재렌더
 
-  if (fly) {
+  if (animate) {
     for (const p of affected) {
       const key = keyOf(p);
       const target = findOwnCircle(key);
       if (!target) { inFlight.delete(key); continue; }
       flyDot(inp.closest("td"), target, groupColor(g), () => {
         inFlight.delete(key);
-        const c = findOwnCircle(key);         // 재렌더됐어도 현재 차트에서 다시 찾음
+        const c = findOwnCircle(key);          // 재렌더됐어도 현재 차트에서 다시 찾음
         if (c) { c.style.opacity = ""; c.classList.add("pop"); }
         drawGuides(groupChart.guideLayer, groupChart.s, p, groupColor(g));
       });
     }
-    focusNextInput(inp);
   }
+  if (fly) focusNextInput(inp);
 }
 
 /* 현재 조 씬 차트에서 key(g:i:s)에 해당하는 (잔상 아닌) 원을 찾는다 */
@@ -875,40 +1152,162 @@ function renderSummary(animateTrend = false) {
   const chart = drawChart(svg, xMaxNow(), yMaxNow());
   const pts = allPoints(true);
 
-  // 조별로 시차를 두고 등장 (모이는 느낌)
+  // 조별로 시차를 두고 등장 (모이는 느낌 — 움직임 줄이기면 즉시)
+  const stagger = REDUCED_MOTION ? 0 : 130;
   CONFIG.groupNames.forEach((_, g) => {
     setTimeout(() => {
       for (const p of pts.filter(p => p.g === g))
         drawPoint(chart.ptLayer, chart.s, p, { pop: true });
-    }, g * 130);
+    }, g * stagger);
   });
 
   // 추세선 + 읽어주기
   const readout = $("#trend-readout");
   if (state.trendOn && CONFIG.trendline) {
-    const fit = fitTrend(pts);
-    setTimeout(() => drawTrendline(chart.trendLayer, chart, fit, animateTrend),
-      G * 130 + 100);
-    if (fit && fit.type === "inverse") {
-      readout.innerHTML =
-        `추세선: <b>${CONFIG.yLabel} ≈ ${fmt(fit.a)} ÷ ${CONFIG.xLabel}${fit.n === 2 ? "²" : ""}</b>` +
-        ` <span style="color:var(--text-muted)">(점 ${pts.length}개로 계산)</span>`;
-    } else if (fit) {
-      const bTxt = CONFIG.trendline === "linear" && Math.abs(fit.b) > 1e-9
-        ? ` ${fit.b >= 0 ? "+" : "−"} ${fmt(Math.abs(fit.b))}` : "";
-      readout.innerHTML =
-        `추세선: <b>${CONFIG.yLabel} ≈ ${fmt(fit.a)} × ${CONFIG.xLabel}${bTxt}</b>` +
-        ` <span style="color:var(--text-muted)">(점 ${pts.length}개로 계산)</span>`;
-    } else {
-      readout.textContent = "점이 2개 이상 있어야 추세선을 그릴 수 있습니다";
-    }
+    const trend = computeTrend(pts);
+    setTimeout(() => drawTrend(chart.trendLayer, chart, trend, animateTrend),
+      G * stagger + 100);
+    readout.innerHTML = trendReadout(trend, pts.length);
   } else {
     readout.textContent = "";
   }
 }
 
 /* ============================================================
-   씬 전환·내비게이션
+   §6 내보내기 — CSV(측정값 표), PNG(종합 그래프)
+   ============================================================ */
+function downloadBlob(filename, blob) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+
+function exportCSV() {
+  const esc = v => {
+    const t = String(v);
+    return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
+  const xh = `${CONFIG.xLabel}(${CONFIG.xUnit})`;
+  const yh = `${CONFIG.yLabel}(${CONFIG.yUnit})`;
+  const rows = [[CONFIG.title], []];           // 첫 줄 제목, 둘째 줄 공백
+  if (MODE === "free") {                       // 세로 형식: 조, x, y
+    rows.push(["조", xh, yh]);
+    for (const p of allPoints()) rows.push([CONFIG.groupNames[p.g], p.x, p.y]);
+  } else if (MODE === "dual") {                // 가로 형식: 조 × 계열 행
+    rows.push([`세로축: ${yh}`]);
+    rows.push(["조", "계열", ...CONFIG.xValues.map(x => `${xh.split("(")[0]} ${fmt(x)}${CONFIG.xUnit}`)]);
+    CONFIG.groupNames.forEach((name, g) =>
+      CONFIG.ySeries.forEach((sn, si) =>
+        rows.push([name, sn, ...state.data[g].map(cell => cell[si] ?? "")])));
+  } else {                                     // 가로 형식: 조 행
+    rows.push([`세로축: ${yh}`]);
+    rows.push(["조", ...CONFIG.xValues.map(x => `${xh.split("(")[0]} ${fmt(x)}${CONFIG.xUnit}`)]);
+    CONFIG.groupNames.forEach((name, g) =>
+      rows.push([name, ...state.data[g].map(v => v ?? "")]));
+  }
+  // ﻿(BOM): 엑셀이 UTF-8 한글을 바로 읽게 하는 표식
+  const csv = "﻿" + rows.map(r => r.map(esc).join(",")).join("\r\n");
+  downloadBlob(`${CONFIG.slug || "data"}.csv`, new Blob([csv], { type: "text/csv;charset=utf-8" }));
+}
+
+/* 종합 그래프를 PNG로 저장. 화면의 SVG 대신 화면 밖에 애니메이션 없이
+   새로 그려서 찍는다 — 어느 씬에서 눌러도, 점 등장 중이어도 완성본이 나온다. */
+function exportPNG() {
+  const tmp = el("svg");
+  tmp.id = "svg-export";
+  tmp.style.cssText = `position:fixed;left:-10000px;top:0;width:${VB.w}px;height:${VB.h}px`;
+  document.body.appendChild(tmp);
+  const chart = drawChart(tmp, xMaxNow(), yMaxNow());
+  const pts = allPoints(true);
+  for (const p of pts) drawPoint(chart.ptLayer, chart.s, p);
+  if (state.trendOn && CONFIG.trendline) drawTrend(chart.trendLayer, chart, computeTrend(pts), false);
+
+  // CSS 클래스는 PNG 직렬화에 반영되지 않으므로 계산된 스타일을 인라인으로 복사
+  const PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap",
+                 "font-family", "font-size", "font-weight", "opacity"];
+  for (const node of tmp.querySelectorAll("*")) {
+    const cs = getComputedStyle(node);
+    for (const prop of PROPS) node.style.setProperty(prop, cs.getPropertyValue(prop));
+  }
+  const bg = el("rect", { x: 0, y: 0, width: VB.w, height: VB.h });
+  bg.style.fill = getComputedStyle(document.body).getPropertyValue("--surface-1").trim() || "#fff";
+  tmp.insertBefore(bg, tmp.firstChild);
+  tmp.setAttribute("width", VB.w);
+  tmp.setAttribute("height", VB.h);
+  // 화면 밖 배치용 style이 이미지로 렌더링될 때 내용을 밀어내므로 반드시 제거
+  tmp.removeAttribute("style");
+  const xml = new XMLSerializer().serializeToString(tmp);
+  tmp.remove();
+
+  const img = new Image();
+  img.onload = () => {
+    const scale = 2;                           // 2배 해상도로 선명하게
+    const canvas = document.createElement("canvas");
+    canvas.width = VB.w * scale;
+    canvas.height = VB.h * scale;
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(b => downloadBlob(`${CONFIG.slug || "graph"}.png`, b), "image/png");
+  };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+}
+
+$("#btn-csv").addEventListener("click", exportCSV);
+$("#btn-png").addEventListener("click", exportPNG);
+
+/* ============================================================
+   §7 지우기·되돌리기
+   지우기 전에 스냅숏을 떠 두고, 토스트의 "되돌리기"(5초)로 복구한다.
+   ============================================================ */
+let undoSnapshot = null;
+let toastTimer = 0;
+
+function showToast(msg) {
+  $("#toast-msg").textContent = msg;
+  $("#toast").hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $("#toast").hidden = true; }, 5000);
+}
+
+/* groupIdx가 null이면 전체, 숫자면 그 조만 지운다 */
+function doClear(groupIdx) {
+  undoSnapshot = JSON.parse(JSON.stringify(state.data));
+  if (groupIdx == null) {
+    state.data = emptyData();
+    state.visible = Array(G).fill(true);
+    state.trendOn = false;
+  } else {
+    state.data[groupIdx] = emptyRow();
+  }
+  saveData();
+}
+
+$("#btn-undo").addEventListener("click", () => {
+  if (!undoSnapshot) return;
+  state.data = undoSnapshot;
+  undoSnapshot = null;
+  saveData();
+  $("#toast").hidden = true;
+  showScene(state.scene);                      // 현재 씬 다시 그림
+});
+
+$("#btn-reset").addEventListener("click", () => {
+  if (!confirm("모든 조의 입력값을 지울까요? (다음 반 수업 시작)")) return;
+  doClear(null);
+  showScene(0);
+  showToast("모든 조의 값을 지웠습니다");
+});
+
+$("#btn-clear-group").addEventListener("click", () => {
+  const g = state.group;
+  doClear(g);
+  renderGroup(g);
+  showToast(`${CONFIG.groupNames[g]} 값을 지웠습니다`);
+});
+
+/* ============================================================
+   §8 씬 전환·내비게이션·전역 UI
    ============================================================ */
 function sceneKind(i) { return i === 0 ? "intro" : i <= G ? "group" : "summary"; }
 
@@ -933,6 +1332,7 @@ function renderDots() {
     d.className = i === state.scene ? "on" : "";
     d.title = sceneKind(i) === "intro" ? "도입"
       : sceneKind(i) === "group" ? CONFIG.groupNames[i - 1] : "종합";
+    d.setAttribute("aria-label", d.title + " 씬으로 이동");
     d.addEventListener("click", () => showScene(i));
     dots.appendChild(d);
   }
@@ -940,19 +1340,21 @@ function renderDots() {
 
 $("#btn-prev").addEventListener("click", () => showScene(state.scene - 1));
 $("#btn-next").addEventListener("click", () => showScene(state.scene + 1));
-document.addEventListener("keydown", e => {
-  if (e.target.tagName === "INPUT") return;
-  if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); showScene(state.scene + 1); }
-  if (e.key === "ArrowLeft") { e.preventDefault(); showScene(state.scene - 1); }
-});
 
-$("#btn-reset").addEventListener("click", () => {
-  if (!confirm("모든 조의 입력값을 지울까요? (다음 반 수업 시작)")) return;
-  state.data = emptyData();
-  state.visible = Array(G).fill(true);
-  state.trendOn = false;
-  saveData();
-  showScene(0);
+/* 키보드: ←/→/Space 이전·다음, Home/0 도입, End/9 종합, 1~6 해당 조
+   (프레젠터 리모컨의 이전/다음 버튼은 ←/→로 들어오므로 그대로 동작) */
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;    // 표 입력 중에는 씬 이동 금지
+  if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); showScene(state.scene + 1); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); showScene(state.scene - 1); }
+  else if (e.key === "Home") { e.preventDefault(); showScene(0); }
+  else if (e.key === "End") { e.preventDefault(); showScene(SCENES - 1); }
+  else if (/^[0-9]$/.test(e.key)) {
+    const d = +e.key;
+    if (d === 0) showScene(0);
+    else if (d <= G) showScene(d);
+    else if (d === 9) showScene(SCENES - 1);
+  }
 });
 
 $("#btn-fullscreen").addEventListener("click", () => {
@@ -960,19 +1362,53 @@ $("#btn-fullscreen").addEventListener("click", () => {
   else document.documentElement.requestFullscreen();
 });
 
-/* 툴팁 */
+/* 테마 토글 — 기본은 OS 설정을 따르고, 🌓를 누르면 반대 테마로 고정.
+   (CSS의 다크 토큰 A/B 블록과 짝을 이룬다. 저장 키는 앱 공통) */
+const THEME_KEY = "group_graph::theme";
+function effectiveDark() {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+}
+{
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === "dark" || saved === "light") document.documentElement.dataset.theme = saved;
+}
+$("#btn-theme").addEventListener("click", () => {
+  const next = effectiveDark() ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem(THEME_KEY, next);
+  showScene(state.scene);                      // 색이 바뀌었으니 현재 씬 다시 그림
+});
+
+/* 툴팁 — 마우스 오버 + 점 클릭(터치) + 키보드 포커스 모두 지원 */
 const tooltip = $("#tooltip");
+function showTipAt(c, x, y) {
+  tooltip.textContent = c.dataset.tip;
+  tooltip.style.display = "block";
+  tooltip.style.left = (x + 14) + "px";
+  tooltip.style.top = (y - 34) + "px";
+}
+function hideTip() { tooltip.style.display = "none"; }
 document.addEventListener("mousemove", e => {
   const c = e.target.closest ? e.target.closest("circle.pt") : null;
+  if (c && c.dataset.tip) showTipAt(c, e.clientX, e.clientY);
+  else hideTip();
+});
+document.addEventListener("click", e => {      // 터치 탭
+  const c = e.target.closest ? e.target.closest("circle.pt") : null;
   if (c && c.dataset.tip) {
-    tooltip.textContent = c.dataset.tip;
-    tooltip.style.display = "block";
-    tooltip.style.left = (e.clientX + 14) + "px";
-    tooltip.style.top = (e.clientY - 34) + "px";
-  } else {
-    tooltip.style.display = "none";
+    const r = c.getBoundingClientRect();
+    showTipAt(c, r.right, r.top);
   }
 });
+document.addEventListener("focusin", e => {    // Tab 키로 점 순회
+  const c = e.target.closest ? e.target.closest("circle.pt") : null;
+  if (c && c.dataset.tip) {
+    const r = c.getBoundingClientRect();
+    showTipAt(c, r.right, r.top);
+  }
+});
+document.addEventListener("focusout", hideTip);
 
 /* ============================================================
    시작

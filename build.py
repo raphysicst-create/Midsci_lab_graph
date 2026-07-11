@@ -1,8 +1,17 @@
 # -*- coding: utf-8 -*-
-"""configs/*.json → dist/<slug>.html (+ dist/index.html) 생성.
+"""src/ 조립 + configs/*.json → dist/<slug>.html (+ dist/index.html) 생성.
+
+빌드 흐름:
+  1. src/skeleton.html 의 자리표시자에 src/template.css·template.js 를 인라인
+     → template.html (조립본, 직접 수정 금지 — src/ 를 고칠 것)
+  2. template.html 의 __CONFIG_START__/__CONFIG_END__ 사이를 config로 치환
+     → dist/<slug>.html (실험별 단일 오프라인 HTML)
+  3. dist/index.html (실험 선택 화면, 학년·제목순 정렬)
 
 사용법:  py build.py            # 전체 빌드
         py build.py <slug>     # 해당 config만 빌드 (index.html은 항상 재생성)
+
+config 스키마는 config.schema.json 참조. 검증 오류는 전부 모아 한 번에 보고한다.
 """
 import json
 import re
@@ -10,51 +19,90 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).parent
+SRC = ROOT / "src"
 DIST = ROOT / "dist"
 MARK = re.compile(r"// __CONFIG_START__.*?// __CONFIG_END__", re.S)
 
-APP_FIELDS = ["title", "xLabel", "xUnit", "yLabel", "yUnit",
+# 앱(HTML)에 주입되는 필드 — 나머지(grade, wiki, note)는 index.html 전용
+APP_FIELDS = ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit",
               "xValues", "groupNames", "trendline", "yMaxHint",
               "entryMode", "maxPoints", "xMaxHint", "ySeries", "trendPower"]
 REQUIRED = ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit",
             "xValues", "trendline", "yMaxHint", "grade"]
+TRENDLINES = ("proportional", "linear", "inverse", "smooth", False)
 DEFAULT_GROUPS = ["1조", "2조", "3조", "4조", "5조", "6조"]
 GRADE_ORDER = {"중1": 0, "중2": 1, "중3": 2}
 
 
+def assemble_template():
+    """src/ 세 파일을 한 HTML로 조립해 template.html에 쓰고 그 내용을 반환."""
+    skel = (SRC / "skeleton.html").read_text(encoding="utf-8")
+    parts = [("/* __CSS_INLINE__ */", (SRC / "template.css").read_text(encoding="utf-8")),
+             ("// __JS_INLINE__", (SRC / "template.js").read_text(encoding="utf-8"))]
+    for marker, content in parts:
+        if skel.count(marker) != 1:
+            sys.exit(f"[오류] src/skeleton.html에 자리표시자 '{marker}'가 정확히 1개 있어야 함")
+        skel = skel.replace(marker, content.rstrip("\n"))
+    (ROOT / "template.html").write_text(skel, encoding="utf-8")
+    return skel
+
+
+def validate(name, cfg):
+    """config 1개의 오류 메시지 목록을 반환 (비어 있으면 통과)."""
+    errs = []
+    free = cfg.get("entryMode") == "free"
+    required = [k for k in REQUIRED if not (free and k == "xValues")]
+    missing = [k for k in required if k not in cfg]
+    if missing:
+        errs.append(f"필수 필드 누락 {missing}")
+        return errs                      # 필수가 빠지면 나머지 검사는 무의미
+    if cfg["trendline"] not in TRENDLINES:
+        errs.append("trendline은 proportional|linear|inverse|smooth|false 여야 함")
+    if cfg["trendline"] == "inverse" and cfg.get("trendPower") not in (None, 1, 2):
+        errs.append("trendPower는 1 또는 2")
+    if free:
+        if "xMaxHint" not in cfg:
+            errs.append("entryMode=free면 xMaxHint 필수")
+        if "ySeries" in cfg:
+            errs.append("free 모드와 ySeries는 함께 쓸 수 없음")
+    elif not (isinstance(cfg["xValues"], list) and len(cfg["xValues"]) >= 2
+              and all(isinstance(v, (int, float)) for v in cfg["xValues"])):
+        errs.append("xValues는 숫자 2개 이상의 리스트여야 함")
+    if "ySeries" in cfg:
+        if not (isinstance(cfg["ySeries"], list) and len(cfg["ySeries"]) == 2
+                and all(isinstance(s, str) for s in cfg["ySeries"])):
+            errs.append("ySeries는 문자열 2개 리스트 (마커 ●/○ 2계열만 지원)")
+        # 두 계열을 하나의 수식으로 적합하면 안 됨 — 계열별 평균 곡선(smooth)만 허용
+        if cfg["trendline"] not in (False, "smooth"):
+            errs.append("ySeries에는 trendline: false 또는 \"smooth\"만 가능")
+    if not re.fullmatch(r"[a-z0-9_]+", str(cfg["slug"])):
+        errs.append(f"slug는 소문자·숫자·밑줄만 ({cfg['slug']})")
+    elif name != cfg["slug"]:
+        errs.append(f"파일명과 slug 불일치 ({cfg['slug']})")
+    return errs
+
+
 def load_configs():
-    cfgs = []
+    """configs/*.json 전부 읽고 검증. 오류는 모아서 한 번에 보고 후 종료."""
+    cfgs, problems = [], []
     for p in sorted((ROOT / "configs").glob("*.json")):
-        cfg = json.loads(p.read_text(encoding="utf-8"))
-        free = cfg.get("entryMode") == "free"
-        required = [k for k in REQUIRED if not (free and k == "xValues")]
-        errs = [k for k in required if k not in cfg]
-        if errs:
-            sys.exit(f"[오류] {p.name}: 필수 필드 누락 {errs}")
-        if cfg["trendline"] not in ("proportional", "linear", "inverse", False):
-            sys.exit(f"[오류] {p.name}: trendline은 proportional|linear|inverse|false 여야 함")
-        if cfg["trendline"] == "inverse" and cfg.get("trendPower") not in (None, 1, 2):
-            sys.exit(f"[오류] {p.name}: trendPower는 1 또는 2")
-        if free:
-            if "xMaxHint" not in cfg:
-                sys.exit(f"[오류] {p.name}: entryMode=free면 xMaxHint 필수")
-            if "ySeries" in cfg:
-                sys.exit(f"[오류] {p.name}: free 모드와 ySeries는 함께 쓸 수 없음")
-        elif not (isinstance(cfg["xValues"], list) and len(cfg["xValues"]) >= 2
-                  and all(isinstance(v, (int, float)) for v in cfg["xValues"])):
-            sys.exit(f"[오류] {p.name}: xValues는 숫자 2개 이상의 리스트여야 함")
-        if "ySeries" in cfg and not (isinstance(cfg["ySeries"], list)
-                                     and len(cfg["ySeries"]) == 2
-                                     and all(isinstance(s, str) for s in cfg["ySeries"])):
-            sys.exit(f"[오류] {p.name}: ySeries는 문자열 2개 리스트 (마커 ●/○ 2계열만 지원)")
-        if not re.fullmatch(r"[a-z0-9_]+", cfg["slug"]):
-            sys.exit(f"[오류] {p.name}: slug는 소문자·숫자·밑줄만 ({cfg['slug']})")
-        if p.stem != cfg["slug"]:
-            sys.exit(f"[오류] {p.name}: 파일명과 slug 불일치 ({cfg['slug']})")
+        try:
+            cfg = json.loads(p.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            problems.append(f"{p.name}: JSON 문법 오류 — {e}")
+            continue
+        for msg in validate(p.stem, cfg):
+            problems.append(f"{p.name}: {msg}")
         cfgs.append(cfg)
-    dup = {c["slug"] for c in cfgs if sum(x["slug"] == c["slug"] for x in cfgs) > 1}
+    dup = {c["slug"] for c in cfgs if "slug" in c
+           and sum(x.get("slug") == c["slug"] for x in cfgs) > 1}
     if dup:
-        sys.exit(f"[오류] slug 중복: {dup}")
+        problems.append(f"slug 중복: {dup}")
+    if problems:
+        print("[오류] config 검증 실패:", file=sys.stderr)
+        for msg in problems:
+            print(f"  - {msg}", file=sys.stderr)
+        sys.exit(1)
     return cfgs
 
 
@@ -78,7 +126,8 @@ def trend_label(cfg):
     t = cfg["trendline"]
     if t == "inverse":
         return "반비례 곡선(y=a÷x²)" if cfg.get("trendPower") == 2 else "반비례 곡선(y=a÷x)"
-    return {"proportional": "비례(원점 통과)", "linear": "직선(절편)", False: "점만(추세선 없음)"}[t]
+    return {"proportional": "비례(원점 통과)", "linear": "직선(절편)",
+            "smooth": "평균 곡선(부드러운 추세)", False: "점만(추세선 없음)"}[t]
 
 
 def build_index(cfgs):
@@ -130,7 +179,7 @@ h2 {{ font-size:1.25rem; margin:30px 0 14px; border-bottom:2px solid var(--line)
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
-    template = (ROOT / "template.html").read_text(encoding="utf-8")
+    template = assemble_template()
     DIST.mkdir(exist_ok=True)
     cfgs = load_configs()
     if only and only not in {c["slug"] for c in cfgs}:

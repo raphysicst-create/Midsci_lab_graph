@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<!-- ============================================================
+  조별 실험 그래프 — HTML 뼈대 (소스)
+
+  ◆ 빌드 구조
+    src/skeleton.html  ← 이 파일. HTML 구조 + 실험 설정(CONFIG) 마커
+    src/template.css   → 아래 <style> 자리(__CSS_INLINE__)에 인라인됨
+    src/template.js    → 맨 아래 <script> 자리(__JS_INLINE__)에 인라인됨
+    `py build.py` 실행 → template.html(조립본) + dist/<실험>.html 생성
+
+  ◆ 다른 HTML 프레젠테이션(슬라이드)에 넣는 3가지 방법 (쉬운 순)
+    1) iframe — 슬라이드 안에 한 줄:
+       <iframe src="dist/실험이름.html" style="width:100%;height:100%;border:0"></iframe>
+    2) 통째 사용 — dist/의 앱은 의존성 없는 단일 HTML이므로
+       파일 하나를 그대로 "한 슬라이드"로 링크하거나 복사해 쓴다.
+    3) 부분 이식 — 아래 4덩이를 순서대로 대상 문서에 복사:
+       ① <style> 전체  ② CONFIG <script>  ③ <header>~<div id="toast"> 마크업
+       ④ 마지막 <script> 전체.  전역 CSS 충돌만 주의(선택자가 평범한 클래스임).
+  ============================================================ -->
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>조별 실험 그래프</title>
+<style>
+/* __CSS_INLINE__ */
+</style>
+</head>
+<body>
+
+<script>
+/* ============================================================
+   실험 설정 — build.py가 __CONFIG_START__/__CONFIG_END__ 사이를
+   configs/*.json 내용으로 치환해 dist/에 실험별 파일을 생성한다.
+   (마커를 지우면 빌드가 실패한다. 수동 편집 시에도 객체만 바꿀 것.)
+   ============================================================ */
+// __CONFIG_START__
+const CONFIG = {
+  slug: "spring_force",           // 저장(localStorage) 키·내보내기 파일명에 쓰임
+  title: "용수철의 탄성력 측정",
+  xLabel: "늘어난 길이", xUnit: "cm",
+  yLabel: "탄성력의 크기", yUnit: "N",
+  xValues: [5, 10, 15, 20],       // 고정 측정점 (각 조는 y값만 입력)
+  groupNames: ["1조", "2조", "3조", "4조", "5조", "6조"],
+  trendline: "proportional",      // 아래 "trendline 종류" 주석 참조
+  yMaxHint: 10,                   // 세로축 시작 최댓값 (데이터가 넘으면 자동 확장)
+};
+// __CONFIG_END__
+
+/* trendline 종류:
+   "proportional" — 원점 통과 직선 y=ax (최소제곱)
+   "linear"       — 직선 y=ax+b (최소제곱)
+   "inverse"      — 반비례 곡선 y=a/xⁿ (trendPower: 1|2, 기본 1)
+   "smooth"       — 각 x의 학급 평균을 부드럽게 이은 곡선 (플래토·수렴 등
+                    수식으로 적합할 수 없는 모양용. dual 모드면 계열별 2곡선)
+   false          — 추세선 없음 (점만)
+
+   선택 필드 (생략하면 비활성):
+   entryMode: "free"     — 각 조가 (x, y) 쌍을 자유 입력. xValues 무시, xMaxHint 필수
+   maxPoints: 5          — free 모드에서 조당 입력 행 수 (기본 5)
+   xMaxHint: 50          — free 모드 가로축 시작 최댓값 (데이터가 넘으면 자동 확장)
+   ySeries: ["뜨거운 물", "찬 물"]
+                         — 고정 x에서 조당 y 2계열 입력 (●=1번째, ○=2번째 마커)
+*/
+</script>
+
+<!-- 상단 바: 제목 + 도구 버튼 (내보내기·테마·전체화면·지우기) -->
+<header class="app-bar">
+  <span id="bar-title"></span>
+  <span class="spacer"></span>
+  <button id="btn-csv" type="button" title="측정값을 CSV(엑셀)로 저장">⬇ CSV</button>
+  <button id="btn-png" type="button" title="종합 그래프를 그림(PNG)으로 저장">⬇ 그림</button>
+  <button id="btn-theme" type="button" aria-label="밝은/어두운 테마 전환">🌓</button>
+  <button id="btn-fullscreen" type="button">⛶ 전체화면</button>
+  <button id="btn-reset" type="button">전체 지우기</button>
+</header>
+
+<main class="stage">
+
+  <!-- 씬 0: 도입 — 축 개념 잡기 -->
+  <section class="scene" id="scene-intro" data-scene="intro">
+    <h1 id="intro-title"></h1>
+    <p class="axes-hint" id="intro-hint"></p>
+    <div class="chart-card"><svg id="svg-intro"></svg></div>
+  </section>
+
+  <!-- 씬 1~N: 조별 입력 (하나의 섹션을 조 번호만 바꿔 재사용) -->
+  <section class="scene" id="scene-group" data-scene="group">
+    <div class="scene-title group-badge">
+      <span class="swatch"></span><span id="group-name"></span>
+      <span style="font-weight:400; font-size:22px; color:var(--text-secondary)">측정 결과</span>
+      <button class="mini-btn" id="btn-clear-group" type="button">이 조 지우기</button>
+    </div>
+    <div class="scene-body">
+      <div class="table-card">
+        <table class="data-table" id="group-table"></table>
+        <p class="table-hint">값을 넣고 Enter — 표의 숫자가 그래프의 점이 됩니다</p>
+      </div>
+      <div class="chart-card"><svg id="svg-group"></svg></div>
+    </div>
+  </section>
+
+  <!-- 마지막 씬: 종합 — 모든 조 + 추세선 -->
+  <section class="scene" id="scene-summary" data-scene="summary">
+    <div class="scene-title">모든 조의 결과를 한 그래프에</div>
+    <div class="legend" id="legend"></div>
+    <div class="scene-body">
+      <div class="chart-card"><svg id="svg-summary"></svg></div>
+    </div>
+    <p class="trend-readout" id="trend-readout"></p>
+  </section>
+
+</main>
+
+<nav class="deck-nav">
+  <button class="nav-btn" id="btn-prev" type="button">◀ 이전</button>
+  <div class="dots" id="dots"></div>
+  <button class="nav-btn" id="btn-next" type="button">다음 ▶</button>
+</nav>
+
+<!-- 점 위 마우스·포커스·탭에 뜨는 값 표시 -->
+<div id="tooltip"></div>
+
+<!-- 지우기 직후 잠깐 뜨는 되돌리기 안내 -->
+<div id="toast" role="status" hidden>
+  <span id="toast-msg"></span>
+  <button id="btn-undo" type="button">되돌리기</button>
+</div>
+
+<script>
+// __JS_INLINE__
+</script>
+</body>
+</html>

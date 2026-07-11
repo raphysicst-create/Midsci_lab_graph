@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "조별 실험 그래프 config (configs/<slug>.json)",
+  "description": "실험 1개 = JSON 1개. build.py가 같은 규칙으로 검증한다 (이 파일은 문서/편집기 자동완성용 — build.py의 validate()와 항상 일치시킬 것).",
+  "type": "object",
+  "required": ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit", "trendline", "yMaxHint", "grade"],
+  "additionalProperties": false,
+  "properties": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$",
+      "description": "파일명과 동일해야 함. localStorage 저장 키·내보내기 파일명으로도 쓰임 — 바꾸면 저장 데이터가 분리된다"
+    },
+    "title": { "type": "string", "description": "앱 제목 (도입 씬·상단 바). 위키 전체에서 유일해야 함" },
+    "grade": { "type": "string", "enum": ["중1", "중2", "중3"], "description": "index.html 분류용" },
+    "wiki": { "type": "string", "description": "근거 실험 페이지 파일명 (예: 실험_용수철의_탄성력_측정.md)" },
+    "xLabel": { "type": "string" },
+    "xUnit": { "type": "string" },
+    "yLabel": { "type": "string" },
+    "yUnit": { "type": "string" },
+    "xValues": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "description": "고정 측정점 — 교과서 과정/결과에 있는 값만. entryMode=free면 생략"
+    },
+    "trendline": {
+      "enum": ["proportional", "linear", "inverse", "smooth", false],
+      "description": "proportional=원점 통과 y=ax | linear=y=ax+b | inverse=y=a÷xⁿ | smooth=학급 평균 곡선(플래토·수렴 등) | false=점만"
+    },
+    "trendPower": { "enum": [1, 2], "description": "inverse 전용: y=a÷x(1) 또는 y=a÷x²(2)" },
+    "yMaxHint": { "type": "number", "description": "세로축 시작 최댓값 (데이터가 넘으면 자동 확장)" },
+    "groupNames": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "생략 시 1~6조"
+    },
+    "entryMode": { "enum": ["free"], "description": "free면 각 조가 (x,y) 쌍을 자유 입력 — xMaxHint 필수, ySeries 불가" },
+    "maxPoints": { "type": "integer", "minimum": 1, "description": "free 모드 조당 입력 행 수 (기본 5)" },
+    "xMaxHint": { "type": "number", "description": "free 모드 가로축 시작 최댓값" },
+    "ySeries": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "고정 x에서 조당 y 2계열 (●/○). trendline은 false 또는 smooth만 가능"
+    },
+    "note": { "type": "string", "description": "교사용 유의점 — index 카드에 표시. 교과서에 없는 제안값은 반드시 여기에 명시" }
+  }
+}
