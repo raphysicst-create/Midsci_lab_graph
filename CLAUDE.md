@@ -1,6 +1,6 @@
 # 조별 실험 그래프 앱 생성기
 
-교과서 위키(`c:\Users\22\Desktop\textbook_wiki`)의 실험 페이지를 수업용
+교과서 위키(`c:\Users\22\Desktop\Y-claude\textbook_wiki`)의 실험 페이지를 수업용
 그래프 프레젠테이션(단일 오프라인 HTML)으로 변환하는 워크플로우 프로젝트다.
 위키 repo **밖**에 있으며, 위키를 읽기만 하고 절대 수정하지 않는다.
 
@@ -84,7 +84,8 @@ coverage.md     # 위키 실험 전체 목록과 적합/조정필요/부적합 �
   **A(OS 추종)·B(수동 토글) 두 블록**이므로 항상 둘 다 같은 값으로.
   차트 6색은 dataviz 검증(인접 CVD ΔE ≥ 12)을 통과한 팔레트 — 임의 교체 금지,
   바꿀 경우 dataviz 스킬의 validate_palette.js로 재검증한다.
-- 기능 수정 후에는 `py -3.12 test_smoke.py`(Playwright E2E)를 돌린다 — 입력→
+- 기능 수정 후에는 `py -3.12 test_smoke.py`(Playwright E2E)를 돌린다
+  (playwright는 3.12에만 설치되어 있음 — 기본 py로 실행하면 ModuleNotFoundError) — 입력→
   점 비행→종합→추세선→새로고침 유지→조별 지우기/되돌리기→CSV/PNG 내보내기까지
   자동 확인. 새 기능이면 test_smoke.py에 확인 단계를 추가한다.
 

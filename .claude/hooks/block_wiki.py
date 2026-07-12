@@ -9,7 +9,7 @@ import json
 import re
 import sys
 
-WIKI = re.compile(r"desktop[/\\]+textbook_wiki(?=[/\\\s\"'`]|$)", re.I)
+WIKI = re.compile(r"textbook_wiki(?=[/\\\s\"'`]|$)", re.I)
 
 
 def deny(reason):

@@ -5,8 +5,8 @@
   도입 씬 제목 → 조별 입력·점 생성 → 종합 씬 → 추세선(수식/smooth) →
   새로고침 후 저장 유지 → 조별 지우기 → 되돌리기 → CSV/PNG 내보내기
 
-사용법:  py test_smoke.py            # 기본 2개 앱(직선 적합 1 + smooth 1)
-        py test_smoke.py <slug>     # 해당 앱만
+사용법:  py -3.12 test_smoke.py            # 기본 2개 앱(직선 적합 1 + smooth 1)
+        py -3.12 test_smoke.py <slug>     # 해당 앱만
 사전 준비: py build.py 로 dist/ 최신화, pip install playwright + playwright install chromium
 """
 import sys

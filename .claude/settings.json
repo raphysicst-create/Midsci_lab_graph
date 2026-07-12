@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py \"C:/Users/22/Desktop/graph_apps/.claude/hooks/block_wiki.py\""
+            "command": "py \"C:/Users/22/Desktop/Y-claude/graph_apps/.claude/hooks/block_wiki.py\""
           }
         ]
       }
