@@ -7,6 +7,7 @@
   2. template.html 의 __CONFIG_START__/__CONFIG_END__ 사이를 config로 치환
      → dist/<slug>.html (실험별 단일 오프라인 HTML)
   3. dist/index.html (실험 선택 화면, 학년·단원순 정렬)
+  4. dist/total.html (전 실험을 한 파일에 내장한 단일 파일 모음)
 
 사용법:  py build.py            # 전체 빌드
         py build.py <slug>     # 해당 config만 빌드 (index.html은 항상 재생성)
@@ -175,55 +176,130 @@ def unit_no(cfg):
     return int(UNIT_RE.fullmatch(str(cfg["unit"])).group(1))
 
 
-def card_html(c):
-    """index의 실험 카드 1개: 제목 / 단원 / (점선) / 설명.
+def card_html(c, total=False):
+    """index/total의 실험 카드 1개: 제목 / 단원 / (점선) / 설명.
     title·summary 속 \n은 카드에서 줄바꿈으로 표시 (앱 화면에서는 공백으로 접힘).
-    note는 config 기록용일 뿐 카드에 표시하지 않는다."""
+    note는 config 기록용일 뿐 카드에 표시하지 않는다.
+    total이면 파일 링크 대신 내장 앱을 여는 data-slug 카드가 된다."""
+    link = (f'href="#{c["slug"]}" data-slug="{c["slug"]}"' if total
+            else f'href="./{c["slug"]}.html"')
     title = esc(c["title"]).replace("\n", "<br>")
     summary = esc(c["summary"]).replace("\n", "<br>")
-    return (f'<a class="card" href="./{c["slug"]}.html">'
+    return (f'<a class="card" {link}>'
             f'<h3>{title}</h3>'
             f'<p class="unit">{esc(c["unit"])}</p>'
             f'<p class="summary">{summary}</p></a>')
 
 
-def build_index(cfgs):
+def grade_sections(cfgs, total=False):
+    """학년(중1/중2)별 h2 + 단원순 카드 그리드 마크업 — index/total 공용."""
     cfgs = sorted(cfgs, key=lambda c: (GRADE_ORDER.get(c["grade"], 9), unit_no(c), c["title"]))
     rows_by_grade = {}
     for c in cfgs:
-        rows_by_grade.setdefault(c["grade"], []).append(card_html(c))
-    sections = "\n".join(
+        rows_by_grade.setdefault(c["grade"], []).append(card_html(c, total))
+    return "\n".join(
         f'<h2>{g}</h2>\n<div class="grid">\n' + "\n".join(rows) + "\n</div>"
         for g, rows in rows_by_grade.items())
+
+
+# index.html·total.html 공용 페이지 스타일
+PAGE_CSS = """:root { --bg:#f7f8fa; --card:#fff; --ink:#1c2733; --sub:#5b6b7c; --line:#dde3ea; --accent:#2a78d6; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#12161c; --card:#1b222b; --ink:#e8edf3; --sub:#9aa8b8; --line:#2c3642; --accent:#6aa9e8; }
+}
+* { box-sizing:border-box; margin:0; }
+body { background:var(--bg); color:var(--ink); font-family:"Malgun Gothic","Noto Sans KR",sans-serif; padding:40px 5vw 80px; }
+h1 { font-size:1.9rem; margin-bottom:6px; }
+.sub { color:var(--sub); margin-bottom:34px; }
+h2 { font-size:1.25rem; margin:30px 0 14px; border-bottom:2px solid var(--line); padding-bottom:8px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px;
+        text-decoration:none; color:inherit; transition:transform .12s, border-color .12s; }
+.card:hover { transform:translateY(-2px); border-color:var(--accent); }
+.card h3 { font-size:1.08rem; margin-bottom:8px; }
+.card p { font-size:.88rem; color:var(--sub); line-height:1.5; }
+.card .unit { font-size:.8rem; color:var(--accent); font-weight:600; }
+.card .summary { margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; word-break:keep-all; }"""
+
+
+def build_index(cfgs):
     html = f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>조별 실험 그래프 — 실험 선택</title>
 <style>
-:root {{ --bg:#f7f8fa; --card:#fff; --ink:#1c2733; --sub:#5b6b7c; --line:#dde3ea; --accent:#2a78d6; }}
-@media (prefers-color-scheme: dark) {{
-  :root {{ --bg:#12161c; --card:#1b222b; --ink:#e8edf3; --sub:#9aa8b8; --line:#2c3642; --accent:#6aa9e8; }}
-}}
-* {{ box-sizing:border-box; margin:0; }}
-body {{ background:var(--bg); color:var(--ink); font-family:"Malgun Gothic","Noto Sans KR",sans-serif; padding:40px 5vw 80px; }}
-h1 {{ font-size:1.9rem; margin-bottom:6px; }}
-.sub {{ color:var(--sub); margin-bottom:34px; }}
-h2 {{ font-size:1.25rem; margin:30px 0 14px; border-bottom:2px solid var(--line); padding-bottom:8px; }}
-.grid {{ display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }}
-.card {{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px;
-        text-decoration:none; color:inherit; transition:transform .12s, border-color .12s; }}
-.card:hover {{ transform:translateY(-2px); border-color:var(--accent); }}
-.card h3 {{ font-size:1.08rem; margin-bottom:8px; }}
-.card p {{ font-size:.88rem; color:var(--sub); line-height:1.5; }}
-.card .unit {{ font-size:.8rem; color:var(--accent); font-weight:600; }}
-.card .summary {{ margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; word-break:keep-all; }}
+{PAGE_CSS}
 </style></head><body>
 <h1>조별 실험 그래프</h1>
 <p class="sub">실험을 고르면 프레젠테이션이 열립니다. 입력값은 실험별로 브라우저에 자동 저장됩니다.</p>
-{sections}
+{grade_sections(cfgs)}
 </body></html>
 """
     (DIST / "index.html").write_text(html, encoding="utf-8")
+
+
+# total.html 뼈대 — JS 중괄호가 많아 f-string 대신 자리표시자 치환 방식
+TOTAL_PAGE = """<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>조별 실험 그래프 — 전체 모음</title>
+<style>
+__CSS__
+#viewer { position:fixed; inset:0; background:var(--bg); z-index:10; display:flex; flex-direction:column; }
+#viewer[hidden] { display:none; }
+#viewer-bar { display:flex; align-items:center; gap:12px; padding:8px 12px; border-bottom:1px solid var(--line); }
+#btn-back { font:inherit; padding:6px 14px; border:1px solid var(--line); border-radius:8px;
+            background:var(--card); color:var(--ink); cursor:pointer; }
+#btn-back:hover { border-color:var(--accent); color:var(--accent); }
+#viewer-title { font-weight:600; }
+#viewer-frame { flex:1; width:100%; border:0; }
+</style></head><body>
+<h1>조별 실험 그래프</h1>
+<p class="sub">실험을 고르면 이 화면에서 바로 열립니다. 이 파일 하나로 전체 실험이 동작하며,
+입력값은 실험별로 브라우저에 자동 저장됩니다.</p>
+__SECTIONS__
+<div id="viewer" hidden>
+  <div id="viewer-bar"><button id="btn-back" type="button">← 실험 목록</button><span id="viewer-title"></span></div>
+  <iframe id="viewer-frame" title="실험 앱"></iframe>
+</div>
+<script>
+const DATA = __PAYLOAD__;
+const viewer = document.getElementById("viewer");
+const frame = document.getElementById("viewer-frame");
+for (const card of document.querySelectorAll(".card[data-slug]")) {
+  card.addEventListener("click", e => {
+    e.preventDefault();
+    const slug = card.dataset.slug;
+    document.getElementById("viewer-title").textContent = DATA.titles[slug];
+    frame.srcdoc = DATA.apps[slug];
+    viewer.hidden = false;
+    document.body.style.overflow = "hidden";   // 뒤 목록 스크롤 잠금
+    frame.addEventListener("load", () => frame.contentWindow.focus(), { once: true });
+  });
+}
+document.getElementById("btn-back").addEventListener("click", () => {
+  viewer.hidden = true;
+  frame.removeAttribute("srcdoc");   // 앱 정지 — 다시 열면 저장값으로 복원
+  document.body.style.overflow = "";
+});
+</script>
+</body></html>
+"""
+
+
+def build_total(template, cfgs):
+    """전 실험 + 선택 화면을 한 파일에 담은 dist/total.html.
+    각 앱 HTML을 JSON으로 내장, 카드 클릭 시 iframe(srcdoc)으로 연다.
+    저장 키는 개별 앱과 같은 slug 기반 localStorage라 데이터가 서로 이어진다."""
+    apps = {c["slug"]: build_app_html(template, c) for c in cfgs}
+    titles = {c["slug"]: c["title"].replace("\n", " ") for c in cfgs}
+    payload = json.dumps({"apps": apps, "titles": titles}, ensure_ascii=False)
+    payload = payload.replace("</", "<\\/")   # 스크립트 블록 보호 (JS 문자열 의미는 동일)
+    html = (TOTAL_PAGE
+            .replace("__CSS__", PAGE_CSS)
+            .replace("__SECTIONS__", grade_sections(cfgs, total=True))
+            .replace("__PAYLOAD__", payload))
+    (DIST / "total.html").write_text(html, encoding="utf-8")
 
 
 def main():
@@ -241,7 +317,8 @@ def main():
         print(f"  {out.relative_to(ROOT)}  ← {cfg['title']} ({cfg['grade']})")
         built += 1
     build_index(cfgs)
-    print(f"완료: 앱 {built}개 빌드, index.html 갱신 (전체 config {len(cfgs)}개)")
+    build_total(template, cfgs)
+    print(f"완료: 앱 {built}개 빌드, index.html·total.html 갱신 (전체 config {len(cfgs)}개)")
 
 
 if __name__ == "__main__":

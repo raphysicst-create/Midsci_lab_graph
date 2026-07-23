@@ -22,6 +22,7 @@ template.html   # build.py가 src/에서 조립한 산출물 — 직접 수정 �
 configs/        # 실험 1개 = JSON 1개. 파일명 = slug.json
 config.schema.json  # config 필드 문서(JSON Schema) — build.py validate()와 일치 유지
 build.py        # src/ 조립 → template.html, configs → dist/<slug>.html + dist/index.html
+                # + dist/total.html (전 실험을 iframe srcdoc으로 내장한 단일 파일 모음)
 dist/           # 산출물 (커밋함 — 교사가 빌드 없이 바로 쓰도록)
 test_smoke.py   # Playwright E2E: 입력→점→종합→추세선→저장 유지→지우기/되돌리기→내보내기
                 # 입력값은 config에서 모드 자동 감지 — 어느 slug든 인자로 주면 됨

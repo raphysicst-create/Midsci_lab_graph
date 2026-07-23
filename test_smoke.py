@@ -6,7 +6,8 @@
   새로고침 후 저장 유지 → 조별 지우기 → 되돌리기 → CSV/PNG 내보내기
 기본 실행이면 추가로:
   config 문자열 이스케이프(라벨에 <·& 있어도 마크업 안 깨짐) ·
-  localStorage 쓰기가 막힌 환경(시크릿 모드 등)에서도 입력 흐름 유지 + 경고 토스트
+  localStorage 쓰기가 막힌 환경(시크릿 모드 등)에서도 입력 흐름 유지 + 경고 토스트 ·
+  total.html(단일 파일 모음)에서 내장 앱 열기·입력·재열람 유지
 
 입력값은 configs/<slug>.json에서 모드를 읽어 자동 생성한다 — 고정 x(y만),
 자유 입력((x,y) 쌍), y 2계열(조당 2값) 어느 앱이든 slug만 주면 된다.
@@ -178,6 +179,35 @@ def check_storage_blocked(browser):
     print("  통과: 저장 차단 환경 (spring_force)")
 
 
+def check_total(browser):
+    """total.html — 카드로 내장 앱이 열리고, 입력이 재열람 시 유지되는가."""
+    page = browser.new_page()
+    page.goto((DIST / "total.html").as_uri())
+    page.evaluate("localStorage.clear()")
+    page.reload()
+    assert page.locator(".card[data-slug]").count() >= 18, "카드 수 부족"
+    expect(page.locator("#viewer")).to_be_hidden()
+
+    page.locator('[data-slug="spring_force"]').click()
+    expect(page.locator("#viewer")).to_be_visible()
+    app = page.frame_locator("#viewer-frame")
+    expect(app.locator("#intro-title")).not_to_have_text("")
+    app.locator("#btn-next").click()
+    inp = app.locator("#group-table input").first
+    inp.fill("4")
+    inp.press("Enter")
+    page.wait_for_timeout(1000)
+    assert app.locator("#svg-group circle.pt:not(.ghost)").count() >= 1, "내장 앱 점 없음"
+
+    page.locator("#btn-back").click()          # 목록으로 → 다시 열면 저장값 복원
+    expect(page.locator("#viewer")).to_be_hidden()
+    page.locator('[data-slug="spring_force"]').click()
+    app.locator("#btn-next").click()
+    expect(app.locator("#group-table input").first).to_have_value("4")
+    page.close()
+    print("  통과: 단일 파일 모음 (total.html)")
+
+
 def main():
     slugs = sys.argv[1:] if len(sys.argv) > 1 else DEFAULT_SLUGS
     with sync_playwright() as pw:
@@ -186,9 +216,10 @@ def main():
         for slug in slugs:
             run_app(page, slug)
         page.close()
-        if len(sys.argv) <= 1:                 # 기본 실행에서만 공통 점검 2종
+        if len(sys.argv) <= 1:                 # 기본 실행에서만 공통 점검 3종
             check_escaping(browser)
             check_storage_blocked(browser)
+            check_total(browser)
         browser.close()
     print("스모크 테스트 전부 통과")
 
