@@ -89,6 +89,32 @@ def test_no_duplicates():
         [base(), base(slug="other", title="다른 제목")]) == []
 
 
+def test_esc():
+    assert build.esc('a<b>&"c') == "a&lt;b&gt;&amp;&quot;c"
+
+
+def test_card_escapes_html():
+    """index 카드에서 config 문자열이 마크업으로 해석되면 안 됨."""
+    out = build.card_html(base(title="제목<b>주입</b>", xLabel="속도<m>",
+                               xUnit="m/s&s", note="주의 & <i>강조</i>"))
+    assert "<b>주입" not in out and "&lt;b&gt;주입" in out
+    assert "&lt;i&gt;강조" in out
+    assert "속도&lt;m&gt;(m/s&amp;s)" in out
+
+
+def test_config_block_script_safe():
+    """title 등에 </script>가 있어도 <script> 블록이 깨지면 안 됨."""
+    out = build.render_config_block(base(title="제목</script><script>x"))
+    assert "</" not in out
+
+
+def test_build_app_backslash_safe():
+    """config 값의 백슬래시가 re 치환 이스케이프로 해석돼 소실되면 안 됨."""
+    template = "머리 // __CONFIG_START__ x // __CONFIG_END__ 꼬리"
+    out = build.build_app_html(template, base(title="경로 C:\\temp 포함"))
+    assert "C:\\\\temp" in out           # JSON 이스케이프(\\temp)가 그대로 보존
+
+
 def test_schema_matches_build():
     """config.schema.json이 build.py 검증 규칙과 어긋나면 실패 (드리프트 감지)."""
     schema = json.loads((ROOT / "config.schema.json").read_text(encoding="utf-8"))

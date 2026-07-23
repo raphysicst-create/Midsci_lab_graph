@@ -605,9 +605,16 @@ const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
    예전 버전은 제목 기반 키였으므로 있으면 1회 옮겨온다. */
 const STORE_KEY = "group_graph::" + (CONFIG.slug || CONFIG.title);
 const LEGACY_KEY = "group_graph::" + CONFIG.title;
-if (LEGACY_KEY !== STORE_KEY && !localStorage.getItem(STORE_KEY)) {
-  const legacy = localStorage.getItem(LEGACY_KEY);
-  if (legacy) localStorage.setItem(STORE_KEY, legacy);
+
+/* localStorage가 막힌 환경(시크릿 모드·잠긴 프로필)에서도 앱은 계속 동작해야 한다 */
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
+};
+
+if (LEGACY_KEY !== STORE_KEY && !store.get(STORE_KEY)) {
+  const legacy = store.get(LEGACY_KEY);
+  if (legacy) store.set(STORE_KEY, legacy);
 }
 
 /* 저장 셀 모양 — fixed: y값|null, dual: [y1,y2], free: [x,y] */
@@ -625,7 +632,7 @@ const state = {
 
 function loadData() {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORE_KEY));
+    const raw = JSON.parse(store.get(STORE_KEY));
     const cellOk = c => MODE === "fixed"
       ? (c === null || typeof c === "number")
       : (Array.isArray(c) && c.length === 2 &&
@@ -636,7 +643,12 @@ function loadData() {
   } catch (e) { /* 깨진 저장값은 무시하고 초기화 */ }
   return emptyData();
 }
-function saveData() { localStorage.setItem(STORE_KEY, JSON.stringify(state.data)); }
+let saveWarned = false;
+function saveData() {
+  if (store.set(STORE_KEY, JSON.stringify(state.data)) || saveWarned) return;
+  saveWarned = true;                             // 경고는 1회만 — 입력 자체는 계속된다
+  showToast("이 브라우저에선 저장이 안 됩니다 — 입력값은 새로고침하면 사라져요", false);
+}
 
 /* 표의 한 입력칸 값 — f: fixed는 0(y), dual은 계열 번호, free는 0(x)/1(y) */
 function getField(g, i, f) { return MODE === "fixed" ? state.data[g][i] : state.data[g][i][f]; }
@@ -923,23 +935,26 @@ function trendReadout(trend, ptCount) {
   if (!trend) return "점이 2개 이상 있어야 추세선을 그릴 수 있습니다";
   if (trend.kind === "smooth") {
     const what = MODE === "dual"
-      ? `<b>● ${CONFIG.ySeries[0]}</b>: 실선 · <b>○ ${CONFIG.ySeries[1]}</b>: 점선`
+      ? `<b>● ${esc(CONFIG.ySeries[0])}</b>: 실선 · <b>○ ${esc(CONFIG.ySeries[1])}</b>: 점선`
       : "";
-    return `추세선: 각 ${CONFIG.xLabel}에서 <b>학급 평균</b>을 부드럽게 이은 곡선${what ? " — " + what : ""}${tail}`;
+    return `추세선: 각 ${esc(CONFIG.xLabel)}에서 <b>학급 평균</b>을 부드럽게 이은 곡선${what ? " — " + what : ""}${tail}`;
   }
   const fit = trend.fit;
   if (fit.type === "inverse") {
-    return `추세선: <b>${CONFIG.yLabel} ≈ ${fmt(fit.a)} ÷ ${CONFIG.xLabel}${fit.n === 2 ? "²" : ""}</b>${tail}`;
+    return `추세선: <b>${esc(CONFIG.yLabel)} ≈ ${fmt(fit.a)} ÷ ${esc(CONFIG.xLabel)}${fit.n === 2 ? "²" : ""}</b>${tail}`;
   }
   const bTxt = CONFIG.trendline === "linear" && Math.abs(fit.b) > 1e-9
     ? ` ${fit.b >= 0 ? "+" : "−"} ${fmt(Math.abs(fit.b))}` : "";
-  return `추세선: <b>${CONFIG.yLabel} ≈ ${fmt(fit.a)} × ${CONFIG.xLabel}${bTxt}</b>${tail}`;
+  return `추세선: <b>${esc(CONFIG.yLabel)} ≈ ${fmt(fit.a)} × ${esc(CONFIG.xLabel)}${bTxt}</b>${tail}`;
 }
 
 /* ============================================================
    §5 씬 렌더링
    ============================================================ */
 const $ = sel => document.querySelector(sel);
+/* config 문자열(라벨·조 이름 등)을 innerHTML에 넣을 땐 반드시 이것을 거친다 */
+const esc = s => String(s).replace(/[&<>"]/g,
+  c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const sceneEls = {
   intro: $("#scene-intro"),
   group: $("#scene-group"),
@@ -950,7 +965,8 @@ let groupChart = null;   // 현재 조 씬의 { s, ptLayer, ... }
 function renderIntro() {
   $("#intro-title").textContent = CONFIG.title;
   $("#intro-hint").innerHTML =
-    `가로축은 <b>${CONFIG.xLabel}(${CONFIG.xUnit})</b>, 세로축은 <b>${CONFIG.yLabel}(${CONFIG.yUnit})</b> — ` +
+    `가로축은 <b>${esc(CONFIG.xLabel)}(${esc(CONFIG.xUnit)})</b>, ` +
+    `세로축은 <b>${esc(CONFIG.yLabel)}(${esc(CONFIG.yUnit)})</b> — ` +
     `측정한 두 값이 만나는 곳에 점을 찍습니다`;
   const svg = $("#svg-intro");
   svg.classList.remove("draw-in");
@@ -981,11 +997,11 @@ function renderGroup(g) {
   const inputCell = (i, f, val) =>
     `<td class="y-cell"><input type="number" min="0" step="any" inputmode="decimal"
         data-i="${i}" data-f="${f}" value="${val ?? ""}"></td>`;
-  const xHead = `<th>${CONFIG.xLabel}(${CONFIG.xUnit})</th>`;
-  const yHead = `<th>${CONFIG.yLabel}(${CONFIG.yUnit})</th>`;
+  const xHead = `<th>${esc(CONFIG.xLabel)}(${esc(CONFIG.xUnit)})</th>`;
+  const yHead = `<th>${esc(CONFIG.yLabel)}(${esc(CONFIG.yUnit)})</th>`;
   let html;
   if (MODE === "dual") {
-    html = `<tr>${xHead}<th>● ${CONFIG.ySeries[0]}</th><th>○ ${CONFIG.ySeries[1]}</th></tr>` +
+    html = `<tr>${xHead}<th>● ${esc(CONFIG.ySeries[0])}</th><th>○ ${esc(CONFIG.ySeries[1])}</th></tr>` +
       CONFIG.xValues.map((x, i) => `
         <tr class="${rowComplete(state.group, i) ? "landed" : ""}">
           <td class="x-cell">${fmt(x)}</td>
@@ -1118,7 +1134,7 @@ function renderSummary(animateTrend = false) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "chip" + (state.visible[g] ? "" : " off");
-    btn.innerHTML = `<span class="swatch" style="background:${groupColor(g)}"></span>${name}`;
+    btn.innerHTML = `<span class="swatch" style="background:${groupColor(g)}"></span>${esc(name)}`;
     btn.addEventListener("click", () => {
       state.visible[g] = !state.visible[g];
       renderSummary();
@@ -1133,7 +1149,7 @@ function renderSummary(animateTrend = false) {
       chip.disabled = true;
       chip.innerHTML =
         `<span class="swatch${si ? " ring" : ""}"` +
-        `${si ? "" : ' style="background:var(--text-secondary)"'}></span>${name}`;
+        `${si ? "" : ' style="background:var(--text-secondary)"'}></span>${esc(name)}`;
       legend.appendChild(chip);
     });
   }
@@ -1264,8 +1280,9 @@ $("#btn-png").addEventListener("click", exportPNG);
 let undoSnapshot = null;
 let toastTimer = 0;
 
-function showToast(msg) {
+function showToast(msg, withUndo = true) {
   $("#toast-msg").textContent = msg;
+  $("#btn-undo").hidden = !withUndo;             // 경고성 토스트엔 되돌리기 버튼 없음
   $("#toast").hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { $("#toast").hidden = true; }, 5000);

@@ -4,6 +4,9 @@
 확인 항목 (CLAUDE.md 워크플로 5단계의 자동화):
   도입 씬 제목 → 조별 입력·점 생성 → 종합 씬 → 추세선(수식/smooth) →
   새로고침 후 저장 유지 → 조별 지우기 → 되돌리기 → CSV/PNG 내보내기
+기본 실행이면 추가로:
+  config 문자열 이스케이프(라벨에 <·& 있어도 마크업 안 깨짐) ·
+  localStorage 쓰기가 막힌 환경(시크릿 모드 등)에서도 입력 흐름 유지 + 경고 토스트
 
 입력값은 configs/<slug>.json에서 모드를 읽어 자동 생성한다 — 고정 x(y만),
 자유 입력((x,y) 쌍), y 2계열(조당 2값) 어느 앱이든 slug만 주면 된다.
@@ -14,9 +17,12 @@
 """
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, expect
+
+import build
 
 ROOT = Path(__file__).parent
 DIST = ROOT / "dist"
@@ -115,6 +121,63 @@ def run_app(page, slug):
     print(f"  통과: {slug}")
 
 
+def check_escaping(browser):
+    """config 문자열에 <·&·따옴표가 있어도 앱 마크업이 깨지지 않는가."""
+    cfg = {
+        "slug": "esc_probe",
+        "title": "제목</script><b>주입</b>",     # </script>로 CONFIG 블록이 깨지는지도 겸사 확인
+        "xLabel": "속도<m>", "xUnit": "m/s&s",
+        "yLabel": '힘"f"', "yUnit": "N",
+        "xValues": [1, 2], "trendline": "linear", "yMaxHint": 10,
+        "groupNames": ["1조<i>주입</i>", "2조", "3조", "4조", "5조", "6조"],
+    }
+    template = (ROOT / "template.html").read_text(encoding="utf-8")
+    html, n = build.MARK.subn(lambda m: build.render_config_block(cfg), template)
+    assert n == 1
+    page = browser.new_page()
+    with tempfile.TemporaryDirectory() as td:
+        probe = Path(td) / "esc_probe.html"
+        probe.write_text(html, encoding="utf-8")
+        page.goto(probe.as_uri())
+        # 제목이 통째로 살아 있으면 </script> 방어가 동작한 것
+        expect(page.locator("#intro-title")).to_have_text(cfg["title"])
+        assert "속도<m>" in page.locator("#intro-hint").inner_text(), "도입 안내에서 라벨 태그 소실"
+        page.locator("#btn-next").click()
+        head = page.locator("#group-table th").first.inner_text()
+        assert head == "속도<m>(m/s&s)", f"표 머리글 깨짐: {head!r}"
+        while page.locator("#btn-next").is_enabled():
+            page.locator("#btn-next").click()
+        assert page.locator("#legend i").count() == 0, "조 이름의 <i>가 실제 태그로 주입됨"
+        assert "1조<i>주입</i>" in page.locator("#legend").inner_text()
+    page.close()
+    print("  통과: 이스케이프 (esc_probe)")
+
+
+def check_storage_blocked(browser):
+    """localStorage 쓰기가 막혀도 입력·점 생성이 계속되고 경고 토스트가 1회 뜨는가."""
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    page.add_init_script(
+        "Storage.prototype.setItem = function () { throw new Error('blocked'); };")
+    page.goto((DIST / "spring_force.html").as_uri())
+    page.locator("#btn-next").click()
+    inputs = page.locator("#group-table input")
+    inputs.nth(0).fill("2.5")
+    inputs.nth(0).press("Enter")
+    page.wait_for_timeout(1000)
+    assert page.locator("#svg-group circle.pt:not(.ghost)").count() >= 1, \
+        "저장 실패가 입력 흐름을 끊음 (점 없음)"
+    expect(page.locator("#toast")).to_be_visible()
+    assert "저장" in page.locator("#toast-msg").inner_text(), "저장 실패 경고 토스트 없음"
+    expect(page.locator("#btn-undo")).to_be_hidden()   # 경고 토스트엔 되돌리기 버튼 없음
+    inputs.nth(1).fill("5")
+    inputs.nth(1).press("Enter")
+    page.wait_for_timeout(1000)
+    assert page.locator("#svg-group circle.pt:not(.ghost)").count() >= 2, "두 번째 입력 실패"
+    ctx.close()
+    print("  통과: 저장 차단 환경 (spring_force)")
+
+
 def main():
     slugs = sys.argv[1:] if len(sys.argv) > 1 else DEFAULT_SLUGS
     with sync_playwright() as pw:
@@ -122,6 +185,10 @@ def main():
         page = browser.new_page()
         for slug in slugs:
             run_app(page, slug)
+        page.close()
+        if len(sys.argv) <= 1:                 # 기본 실행에서만 공통 점검 2종
+            check_escaping(browser)
+            check_storage_blocked(browser)
         browser.close()
     print("스모크 테스트 전부 통과")
 

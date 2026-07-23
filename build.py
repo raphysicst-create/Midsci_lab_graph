@@ -135,19 +135,33 @@ def load_configs():
     return cfgs
 
 
+def esc(s):
+    """HTML 이스케이프 — config 문자열이 index 카드 마크업을 깨지 않도록."""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
 def render_config_block(cfg):
     c = {k: cfg[k] for k in APP_FIELDS if k in cfg}
     c.setdefault("groupNames", DEFAULT_GROUPS)
     body = ",\n".join(f"  {k}: {json.dumps(v, ensure_ascii=False)}" for k, v in c.items())
+    # 값에 </script> 등이 있어도 스크립트 블록이 깨지지 않도록 (JS 문자열 의미는 동일)
+    body = body.replace("</", "<\\/")
     return "// __CONFIG_START__\nconst CONFIG = {\n" + body + ",\n};\n// __CONFIG_END__"
 
 
-def build_app(template, cfg):
-    html, n = MARK.subn(render_config_block(cfg), template)
+def build_app_html(template, cfg):
+    """마커 구간을 config로 치환한 HTML 문자열.
+    치환문은 함수로 넘긴다 — 문자열로 주면 re가 값 속 백슬래시를 이스케이프로 해석."""
+    html, n = MARK.subn(lambda m: render_config_block(cfg), template)
     if n != 1:
         sys.exit("[오류] template.html에서 __CONFIG_START__/__CONFIG_END__ 마커를 찾지 못함")
+    return html
+
+
+def build_app(template, cfg):
     out = DIST / f"{cfg['slug']}.html"
-    out.write_text(html, encoding="utf-8")
+    out.write_text(build_app_html(template, cfg), encoding="utf-8")
     return out
 
 
@@ -159,19 +173,24 @@ def trend_label(cfg):
             "smooth": "평균 곡선(부드러운 추세)", False: "점만(추세선 없음)"}[t]
 
 
+def card_html(c):
+    """index의 실험 카드 1개 — config 문자열은 전부 esc()를 거친다."""
+    note = f'<div class="note">{esc(c["note"])}</div>' if c.get("note") else ""
+    xv = ("자유 입력" if c.get("entryMode") == "free"
+          else ", ".join(str(v) for v in c["xValues"]))
+    series = f' [{esc(c["ySeries"][0])}·{esc(c["ySeries"][1])}]' if c.get("ySeries") else ""
+    return (f'<a class="card" href="./{c["slug"]}.html">'
+            f'<h3>{esc(c["title"])}</h3>'
+            f'<p>{esc(c["xLabel"])}({esc(c["xUnit"])}) {xv} → '
+            f'{esc(c["yLabel"])}({esc(c["yUnit"])}){series}</p>'
+            f'<p class="trend">{trend_label(c)}</p>{note}</a>')
+
+
 def build_index(cfgs):
     cfgs = sorted(cfgs, key=lambda c: (GRADE_ORDER.get(c["grade"], 9), c["title"]))
     rows_by_grade = {}
     for c in cfgs:
-        note = f'<div class="note">{c["note"]}</div>' if c.get("note") else ""
-        xv = ("자유 입력" if c.get("entryMode") == "free"
-              else ", ".join(str(v) for v in c["xValues"]))
-        series = f' [{c["ySeries"][0]}·{c["ySeries"][1]}]' if c.get("ySeries") else ""
-        rows_by_grade.setdefault(c["grade"], []).append(
-            f'<a class="card" href="./{c["slug"]}.html">'
-            f'<h3>{c["title"]}</h3>'
-            f'<p>{c["xLabel"]}({c["xUnit"]}) {xv} → {c["yLabel"]}({c["yUnit"]}){series}</p>'
-            f'<p class="trend">{trend_label(c)}</p>{note}</a>')
+        rows_by_grade.setdefault(c["grade"], []).append(card_html(c))
     sections = "\n".join(
         f'<h2>{g}</h2>\n<div class="grid">\n' + "\n".join(rows) + "\n</div>"
         for g, rows in rows_by_grade.items())
