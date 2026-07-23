@@ -1,2 +1,10 @@
-﻿node_modules/
+# Python
+__pycache__/
 *.pyc
+
+# Node (혹시 도구 설치 시)
+node_modules/
+
+# OS 잡파일
+Thumbs.db
+.DS_Store
