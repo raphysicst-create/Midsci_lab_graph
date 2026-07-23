@@ -105,6 +105,10 @@ header.app-bar {
   border-bottom: 1px solid var(--border);
   font-size: 16px;
   color: var(--text-secondary);
+  /* 씬 내용이 넘쳐도 바 위로 올라오지 못하게 (불투명 배경 + 위 레이어) */
+  position: relative;
+  z-index: 2;
+  background: var(--page);
 }
 header.app-bar .spacer { flex: 1; }
 header.app-bar button {
@@ -162,7 +166,9 @@ button.mini-btn:hover { color: var(--text-primary); }
   margin-bottom: 26px;
 }
 #scene-intro .axes-hint b { color: var(--text-primary); }
-#scene-intro .chart-card { width: min(880px, 88%); }
+/* min-height:0 — 창이 낮으면 카드가 고유 비율 높이 밑으로도 줄어
+   제목·안내문이 위로 밀려나지 않게 (차트는 비율 유지한 채 축소) */
+#scene-intro .chart-card { width: min(880px, 88%); min-height: 0; }
 
 /* --- 카드 --- */
 .chart-card {
