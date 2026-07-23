@@ -14,7 +14,7 @@
     "title": { "type": "string", "description": "앱 제목 (도입 씬·상단 바). 위키 전체에서 유일해야 함. \\n을 넣으면 index 카드에서만 줄바꿈으로 표시" },
     "grade": { "type": "string", "enum": ["중1", "중2", "중3"], "description": "index.html 분류용" },
     "unit": { "type": "string", "pattern": "^[0-9]+단원_.+$", "description": "소속 단원 — 'N단원_이름' 형식 (예: 3단원_열). index 카드 표시·단원순 정렬용" },
-    "summary": { "type": "string", "minLength": 1, "description": "실험 한 줄 설명 (위키 근거) — index 카드에 표시" },
+    "summary": { "type": "string", "minLength": 1, "description": "실험 설명 (위키 근거) — index 카드에 표시. \\n으로 카드 줄바꿈 지정 (짧은 2줄 권장)" },
     "wiki": { "type": "string", "description": "근거 실험 페이지 파일명 (예: 실험_용수철의_탄성력_측정.md)" },
     "xLabel": { "type": "string" },
     "xUnit": { "type": "string" },
@@ -47,7 +47,7 @@
       "maxItems": 2,
       "description": "고정 x에서 조당 y 2계열 (●/○). trendline은 false 또는 smooth만 가능"
     },
-    "note": { "type": "string", "description": "교사용 유의점 — index 카드에 표시. 교과서에 없는 제안값은 반드시 여기에 명시" }
+    "note": { "type": "string", "description": "교사용 유의점·제안값 근거의 config 기록용 (index 카드에는 표시하지 않음). 교과서에 없는 제안값은 반드시 여기에 명시" }
   },
   "allOf": [
     {

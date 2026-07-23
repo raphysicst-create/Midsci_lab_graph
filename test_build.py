@@ -87,11 +87,13 @@ def test_summary_nonempty():
 
 
 def test_card_layout():
-    """카드가 제목/단원/설명 순이고, title의 \\n은 <br>로 바뀌는가."""
-    out = build.card_html(base(title="앞줄\n뒷줄"))
-    assert "앞줄<br>뒷줄" in out
-    assert out.index("<h3>") < out.index('class="unit"') < out.index("테스트용 한 줄 설명")
+    """카드가 제목/단원/설명 순, title·summary의 \\n은 <br>, note는 미표시."""
+    out = build.card_html(base(title="앞줄\n뒷줄", summary="설명1\n설명2",
+                               note="카드에 없어야 함"))
+    assert "앞줄<br>뒷줄" in out and "설명1<br>설명2" in out
+    assert out.index("<h3>") < out.index('class="unit"') < out.index('class="summary"')
     assert "3단원_열" in out
+    assert "카드에 없어야 함" not in out
 
 
 def test_unit_sort_key():
@@ -121,11 +123,10 @@ def test_esc():
 def test_card_escapes_html():
     """index 카드에서 config 문자열이 마크업으로 해석되면 안 됨."""
     out = build.card_html(base(title="제목<b>주입</b>", unit="3단원_열<x>",
-                               summary="설명 & <s>취소</s>", note="주의 & <i>강조</i>"))
+                               summary="설명 & <s>취소</s>"))
     assert "<b>주입" not in out and "&lt;b&gt;주입" in out
     assert "열&lt;x&gt;" in out
     assert "설명 &amp; &lt;s&gt;취소" in out
-    assert "&lt;i&gt;강조" in out
 
 
 def test_config_block_script_safe():

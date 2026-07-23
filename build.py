@@ -176,14 +176,15 @@ def unit_no(cfg):
 
 
 def card_html(c):
-    """index의 실험 카드 1개(제목/단원/설명) — config 문자열은 전부 esc()를 거친다.
-    title 속 \n은 카드에서만 줄바꿈으로 표시 (앱 화면에서는 공백으로 접힘)."""
-    note = f'<div class="note">{esc(c["note"])}</div>' if c.get("note") else ""
+    """index의 실험 카드 1개: 제목 / 단원 / (점선) / 설명.
+    title·summary 속 \n은 카드에서 줄바꿈으로 표시 (앱 화면에서는 공백으로 접힘).
+    note는 config 기록용일 뿐 카드에 표시하지 않는다."""
     title = esc(c["title"]).replace("\n", "<br>")
+    summary = esc(c["summary"]).replace("\n", "<br>")
     return (f'<a class="card" href="./{c["slug"]}.html">'
             f'<h3>{title}</h3>'
             f'<p class="unit">{esc(c["unit"])}</p>'
-            f'<p>{esc(c["summary"])}</p>{note}</a>')
+            f'<p class="summary">{summary}</p></a>')
 
 
 def build_index(cfgs):
@@ -214,8 +215,8 @@ h2 {{ font-size:1.25rem; margin:30px 0 14px; border-bottom:2px solid var(--line)
 .card:hover {{ transform:translateY(-2px); border-color:var(--accent); }}
 .card h3 {{ font-size:1.08rem; margin-bottom:8px; }}
 .card p {{ font-size:.88rem; color:var(--sub); line-height:1.5; }}
-.card .unit {{ font-size:.8rem; color:var(--accent); font-weight:600; margin-bottom:6px; }}
-.card .note {{ margin-top:8px; font-size:.8rem; color:var(--sub); border-top:1px dashed var(--line); padding-top:8px; }}
+.card .unit {{ font-size:.8rem; color:var(--accent); font-weight:600; }}
+.card .summary {{ margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; word-break:keep-all; }}
 </style></head><body>
 <h1>조별 실험 그래프</h1>
 <p class="sub">실험을 고르면 프레젠테이션이 열립니다. 입력값은 실험별로 브라우저에 자동 저장됩니다.</p>
