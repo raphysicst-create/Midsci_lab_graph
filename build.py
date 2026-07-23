@@ -6,7 +6,7 @@
      → template.html (조립본, 직접 수정 금지 — src/ 를 고칠 것)
   2. template.html 의 __CONFIG_START__/__CONFIG_END__ 사이를 config로 치환
      → dist/<slug>.html (실험별 단일 오프라인 HTML)
-  3. dist/index.html (실험 선택 화면, 학년·제목순 정렬)
+  3. dist/index.html (실험 선택 화면, 학년·단원순 정렬)
 
 사용법:  py build.py            # 전체 빌드
         py build.py <slug>     # 해당 config만 빌드 (index.html은 항상 재생성)
@@ -23,14 +23,15 @@ SRC = ROOT / "src"
 DIST = ROOT / "dist"
 MARK = re.compile(r"// __CONFIG_START__.*?// __CONFIG_END__", re.S)
 
-# 앱(HTML)에 주입되는 필드 — 나머지(grade, wiki, note)는 index.html 전용
+# 앱(HTML)에 주입되는 필드 — 나머지(grade, wiki, note, unit, summary)는 index.html 전용
 APP_FIELDS = ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit",
               "xValues", "groupNames", "trendline", "yMaxHint",
               "entryMode", "maxPoints", "xMaxHint", "ySeries", "trendPower"]
 REQUIRED = ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit",
-            "xValues", "trendline", "yMaxHint", "grade"]
+            "xValues", "trendline", "yMaxHint", "grade", "unit", "summary"]
 # config에 올 수 있는 전체 필드 — 이 밖의 키는 오타로 간주해 거부
-KNOWN_FIELDS = APP_FIELDS + ["grade", "wiki", "note"]
+KNOWN_FIELDS = APP_FIELDS + ["grade", "wiki", "note", "unit", "summary"]
+UNIT_RE = re.compile(r"(\d+)단원_.+")   # index 카드 표기·단원순 정렬 근거
 TRENDLINES = ("proportional", "linear", "inverse", "smooth", False)
 DEFAULT_GROUPS = ["1조", "2조", "3조", "4조", "5조", "6조"]
 GRADE_ORDER = {"중1": 0, "중2": 1, "중3": 2}
@@ -95,6 +96,10 @@ def validate(name, cfg):
         # 두 계열을 하나의 수식으로 적합하면 안 됨 — 계열별 평균 곡선(smooth)만 허용
         if cfg["trendline"] not in (False, "smooth"):
             errs.append("ySeries에는 trendline: false 또는 \"smooth\"만 가능")
+    if not UNIT_RE.fullmatch(str(cfg["unit"])):
+        errs.append(f"unit은 'N단원_이름' 형식이어야 함 (예: 3단원_열) — {cfg['unit']!r}")
+    if not (isinstance(cfg["summary"], str) and cfg["summary"].strip()):
+        errs.append("summary는 비어 있지 않은 문자열이어야 함 (index 카드 설명)")
     if not re.fullmatch(r"[a-z0-9_]+", str(cfg["slug"])):
         errs.append(f"slug는 소문자·숫자·밑줄만 ({cfg['slug']})")
     elif name != cfg["slug"]:
@@ -165,29 +170,24 @@ def build_app(template, cfg):
     return out
 
 
-def trend_label(cfg):
-    t = cfg["trendline"]
-    if t == "inverse":
-        return "반비례 곡선(y=a÷x²)" if cfg.get("trendPower") == 2 else "반비례 곡선(y=a÷x)"
-    return {"proportional": "비례(원점 통과)", "linear": "직선(절편)",
-            "smooth": "평균 곡선(부드러운 추세)", False: "점만(추세선 없음)"}[t]
+def unit_no(cfg):
+    """'3단원_열' → 3 (단원순 정렬 키). validate()가 형식을 보장한다."""
+    return int(UNIT_RE.fullmatch(str(cfg["unit"])).group(1))
 
 
 def card_html(c):
-    """index의 실험 카드 1개 — config 문자열은 전부 esc()를 거친다."""
+    """index의 실험 카드 1개(제목/단원/설명) — config 문자열은 전부 esc()를 거친다.
+    title 속 \n은 카드에서만 줄바꿈으로 표시 (앱 화면에서는 공백으로 접힘)."""
     note = f'<div class="note">{esc(c["note"])}</div>' if c.get("note") else ""
-    xv = ("자유 입력" if c.get("entryMode") == "free"
-          else ", ".join(str(v) for v in c["xValues"]))
-    series = f' [{esc(c["ySeries"][0])}·{esc(c["ySeries"][1])}]' if c.get("ySeries") else ""
+    title = esc(c["title"]).replace("\n", "<br>")
     return (f'<a class="card" href="./{c["slug"]}.html">'
-            f'<h3>{esc(c["title"])}</h3>'
-            f'<p>{esc(c["xLabel"])}({esc(c["xUnit"])}) {xv} → '
-            f'{esc(c["yLabel"])}({esc(c["yUnit"])}){series}</p>'
-            f'<p class="trend">{trend_label(c)}</p>{note}</a>')
+            f'<h3>{title}</h3>'
+            f'<p class="unit">{esc(c["unit"])}</p>'
+            f'<p>{esc(c["summary"])}</p>{note}</a>')
 
 
 def build_index(cfgs):
-    cfgs = sorted(cfgs, key=lambda c: (GRADE_ORDER.get(c["grade"], 9), c["title"]))
+    cfgs = sorted(cfgs, key=lambda c: (GRADE_ORDER.get(c["grade"], 9), unit_no(c), c["title"]))
     rows_by_grade = {}
     for c in cfgs:
         rows_by_grade.setdefault(c["grade"], []).append(card_html(c))
@@ -214,7 +214,7 @@ h2 {{ font-size:1.25rem; margin:30px 0 14px; border-bottom:2px solid var(--line)
 .card:hover {{ transform:translateY(-2px); border-color:var(--accent); }}
 .card h3 {{ font-size:1.08rem; margin-bottom:8px; }}
 .card p {{ font-size:.88rem; color:var(--sub); line-height:1.5; }}
-.card .trend {{ margin-top:6px; color:var(--accent); font-weight:600; }}
+.card .unit {{ font-size:.8rem; color:var(--accent); font-weight:600; margin-bottom:6px; }}
 .card .note {{ margin-top:8px; font-size:.8rem; color:var(--sub); border-top:1px dashed var(--line); padding-top:8px; }}
 </style></head><body>
 <h1>조별 실험 그래프</h1>

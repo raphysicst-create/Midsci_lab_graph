@@ -2,6 +2,8 @@
   "slug": "evaporation",
   "title": "증발에 따른 질량 변화",
   "grade": "중1",
+  "unit": "4단원_물질의상태변화",
+  "summary": "거름종이에 떨어뜨린 아세톤의 질량을 시간에 따라 측정, 표면에서 증발이 일어나 질량이 점점 줄어듦을 확인",
   "wiki": "실험_증발_현상_관찰.md",
   "entryMode": "free",
   "maxPoints": 6,

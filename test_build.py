@@ -21,6 +21,7 @@ def base(**over):
         "slug": "spring_test", "title": "테스트 실험", "grade": "중1",
         "xLabel": "늘어난 길이", "xUnit": "cm", "yLabel": "힘", "yUnit": "N",
         "xValues": [5, 10, 15], "trendline": "proportional", "yMaxHint": 10,
+        "unit": "3단원_열", "summary": "테스트용 한 줄 설명",
     }
     for k, v in over.items():
         if v is None:
@@ -73,6 +74,30 @@ def test_unknown_field_rejected():
     assert "trendine" in errs(base(trendine="linear"))   # 오타 필드 감지
 
 
+def test_unit_format():
+    """unit은 'N단원_이름' 형식만 허용 — 단원순 정렬의 전제."""
+    assert errs(base(unit="3단원_열")) == ""
+    for bad in ("열", "단원_열", "3단원 열", 3):
+        assert "unit" in errs(base(unit=bad)), f"unit={bad!r} 통과하면 안 됨"
+
+
+def test_summary_nonempty():
+    assert "summary" in errs(base(summary="  "))
+    assert "summary" in errs(base(summary=None))         # 필수 누락
+
+
+def test_card_layout():
+    """카드가 제목/단원/설명 순이고, title의 \\n은 <br>로 바뀌는가."""
+    out = build.card_html(base(title="앞줄\n뒷줄"))
+    assert "앞줄<br>뒷줄" in out
+    assert out.index("<h3>") < out.index('class="unit"') < out.index("테스트용 한 줄 설명")
+    assert "3단원_열" in out
+
+
+def test_unit_sort_key():
+    assert build.unit_no(base(unit="12단원_예시")) == 12
+
+
 def test_duplicate_slug():
     probs = "\n".join(build.find_duplicates([base(), base(title="다른 제목")]))
     assert "slug" in probs
@@ -95,11 +120,12 @@ def test_esc():
 
 def test_card_escapes_html():
     """index 카드에서 config 문자열이 마크업으로 해석되면 안 됨."""
-    out = build.card_html(base(title="제목<b>주입</b>", xLabel="속도<m>",
-                               xUnit="m/s&s", note="주의 & <i>강조</i>"))
+    out = build.card_html(base(title="제목<b>주입</b>", unit="3단원_열<x>",
+                               summary="설명 & <s>취소</s>", note="주의 & <i>강조</i>"))
     assert "<b>주입" not in out and "&lt;b&gt;주입" in out
+    assert "열&lt;x&gt;" in out
+    assert "설명 &amp; &lt;s&gt;취소" in out
     assert "&lt;i&gt;강조" in out
-    assert "속도&lt;m&gt;(m/s&amp;s)" in out
 
 
 def test_config_block_script_safe():

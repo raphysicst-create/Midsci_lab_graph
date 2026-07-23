@@ -2,6 +2,8 @@
   "slug": "density",
   "title": "물체의 부피와 질량 (밀도)",
   "grade": "중2",
+  "unit": "1단원_물질의특성",
+  "summary": "크기가 다른 물체의 질량과 부피를 측정해 밀도를 계산, 크기와 무관하게 밀도가 일정한 물질의 특성임을 확인",
   "wiki": "실험_밀도_측정.md",
   "entryMode": "free",
   "maxPoints": 6,

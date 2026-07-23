@@ -3,7 +3,7 @@
   "title": "조별 실험 그래프 config (configs/<slug>.json)",
   "description": "실험 1개 = JSON 1개. build.py가 같은 규칙으로 검증한다 (이 파일은 문서/편집기 자동완성용 — build.py의 validate()와 항상 일치시킬 것).",
   "type": "object",
-  "required": ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit", "trendline", "yMaxHint", "grade"],
+  "required": ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit", "trendline", "yMaxHint", "grade", "unit", "summary"],
   "additionalProperties": false,
   "properties": {
     "slug": {
@@ -11,8 +11,10 @@
       "pattern": "^[a-z0-9_]+$",
       "description": "파일명과 동일해야 함. localStorage 저장 키·내보내기 파일명으로도 쓰임 — 바꾸면 저장 데이터가 분리된다"
     },
-    "title": { "type": "string", "description": "앱 제목 (도입 씬·상단 바). 위키 전체에서 유일해야 함" },
+    "title": { "type": "string", "description": "앱 제목 (도입 씬·상단 바). 위키 전체에서 유일해야 함. \\n을 넣으면 index 카드에서만 줄바꿈으로 표시" },
     "grade": { "type": "string", "enum": ["중1", "중2", "중3"], "description": "index.html 분류용" },
+    "unit": { "type": "string", "pattern": "^[0-9]+단원_.+$", "description": "소속 단원 — 'N단원_이름' 형식 (예: 3단원_열). index 카드 표시·단원순 정렬용" },
+    "summary": { "type": "string", "minLength": 1, "description": "실험 한 줄 설명 (위키 근거) — index 카드에 표시" },
     "wiki": { "type": "string", "description": "근거 실험 페이지 파일명 (예: 실험_용수철의_탄성력_측정.md)" },
     "xLabel": { "type": "string" },
     "xUnit": { "type": "string" },
