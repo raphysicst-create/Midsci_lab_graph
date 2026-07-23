@@ -24,6 +24,8 @@ config.schema.json  # config 필드 문서(JSON Schema) — build.py validate()�
 build.py        # src/ 조립 → template.html, configs → dist/<slug>.html + dist/index.html
 dist/           # 산출물 (커밋함 — 교사가 빌드 없이 바로 쓰도록)
 test_smoke.py   # Playwright E2E: 입력→점→종합→추세선→저장 유지→지우기/되돌리기→내보내기
+                # 입력값은 config에서 모드 자동 감지 — 어느 slug든 인자로 주면 됨
+test_build.py   # build.py 검증 규칙 단위 테스트 + config.schema.json 드리프트 감지 (py test_build.py)
 coverage.md     # 위키 실험 전체 목록과 적합/조정필요/부적합 판정 — 백로그
 ```
 
@@ -87,7 +89,10 @@ coverage.md     # 위키 실험 전체 목록과 적합/조정필요/부적합 �
 - 기능 수정 후에는 `py -3.12 test_smoke.py`(Playwright E2E)를 돌린다
   (playwright는 3.12에만 설치되어 있음 — 기본 py로 실행하면 ModuleNotFoundError) — 입력→
   점 비행→종합→추세선→새로고침 유지→조별 지우기/되돌리기→CSV/PNG 내보내기까지
-  자동 확인. 새 기능이면 test_smoke.py에 확인 단계를 추가한다.
+  기본 5개 앱(고정 x·자유 입력·2계열 세 모드 표본)으로 자동 확인.
+  새 기능이면 test_smoke.py에 확인 단계를 추가한다.
+- build.py의 검증 규칙이나 config.schema.json을 바꿨다면 `py test_build.py`
+  (단위 테스트, Playwright 불필요)도 함께 돌린다 — 두 파일이 어긋나면 여기서 잡힌다.
 
 ## 금지사항
 

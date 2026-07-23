@@ -46,5 +46,20 @@
       "description": "고정 x에서 조당 y 2계열 (●/○). trendline은 false 또는 smooth만 가능"
     },
     "note": { "type": "string", "description": "교사용 유의점 — index 카드에 표시. 교과서에 없는 제안값은 반드시 여기에 명시" }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["entryMode"] },
+      "then": { "required": ["xMaxHint"] },
+      "else": { "required": ["xValues"] }
+    },
+    {
+      "if": { "required": ["entryMode"] },
+      "then": { "not": { "required": ["ySeries"] } }
+    },
+    {
+      "if": { "required": ["ySeries"] },
+      "then": { "properties": { "trendline": { "enum": ["smooth", false] } } }
+    }
+  ]
 }

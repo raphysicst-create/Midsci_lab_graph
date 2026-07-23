@@ -29,6 +29,8 @@ APP_FIELDS = ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit",
               "entryMode", "maxPoints", "xMaxHint", "ySeries", "trendPower"]
 REQUIRED = ["slug", "title", "xLabel", "xUnit", "yLabel", "yUnit",
             "xValues", "trendline", "yMaxHint", "grade"]
+# config에 올 수 있는 전체 필드 — 이 밖의 키는 오타로 간주해 거부
+KNOWN_FIELDS = APP_FIELDS + ["grade", "wiki", "note"]
 TRENDLINES = ("proportional", "linear", "inverse", "smooth", False)
 DEFAULT_GROUPS = ["1조", "2조", "3조", "4조", "5조", "6조"]
 GRADE_ORDER = {"중1": 0, "중2": 1, "중3": 2}
@@ -50,6 +52,11 @@ def assemble_template():
 def validate(name, cfg):
     """config 1개의 오류 메시지 목록을 반환 (비어 있으면 통과)."""
     errs = []
+    def num(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+    unknown = [k for k in cfg if k not in KNOWN_FIELDS]
+    if unknown:
+        errs.append(f"알 수 없는 필드 {unknown} — 오타 확인 (config.schema.json 참조)")
     free = cfg.get("entryMode") == "free"
     required = [k for k in REQUIRED if not (free and k == "xValues")]
     missing = [k for k in required if k not in cfg]
@@ -60,9 +67,22 @@ def validate(name, cfg):
         errs.append("trendline은 proportional|linear|inverse|smooth|false 여야 함")
     if cfg["trendline"] == "inverse" and cfg.get("trendPower") not in (None, 1, 2):
         errs.append("trendPower는 1 또는 2")
+    if cfg["grade"] not in GRADE_ORDER:
+        errs.append(f"grade는 {'|'.join(GRADE_ORDER)} 중 하나 ({cfg['grade']!r})")
+    if not num(cfg["yMaxHint"]):
+        errs.append("yMaxHint는 숫자여야 함")
+    if "maxPoints" in cfg and not (isinstance(cfg["maxPoints"], int)
+                                   and not isinstance(cfg["maxPoints"], bool)
+                                   and cfg["maxPoints"] >= 1):
+        errs.append("maxPoints는 1 이상의 정수여야 함")
+    if "groupNames" in cfg and not (isinstance(cfg["groupNames"], list)
+                                    and all(isinstance(g, str) for g in cfg["groupNames"])):
+        errs.append("groupNames는 문자열 리스트여야 함")
     if free:
         if "xMaxHint" not in cfg:
             errs.append("entryMode=free면 xMaxHint 필수")
+        elif not num(cfg["xMaxHint"]):
+            errs.append("xMaxHint는 숫자여야 함")
         if "ySeries" in cfg:
             errs.append("free 모드와 ySeries는 함께 쓸 수 없음")
     elif not (isinstance(cfg["xValues"], list) and len(cfg["xValues"]) >= 2
@@ -82,6 +102,18 @@ def validate(name, cfg):
     return errs
 
 
+def find_duplicates(cfgs):
+    """slug·title 중복 문제 목록 — 파일 간 유일성 검사라 validate() 밖에 둔다.
+    (title은 구 버전 localStorage 키라 중복 시 저장 데이터가 섞인다)"""
+    probs = []
+    for field in ("slug", "title"):
+        vals = [c[field] for c in cfgs if field in c]
+        dup = {v for v in vals if vals.count(v) > 1}
+        if dup:
+            probs.append(f"{field} 중복: {dup}")
+    return probs
+
+
 def load_configs():
     """configs/*.json 전부 읽고 검증. 오류는 모아서 한 번에 보고 후 종료."""
     cfgs, problems = [], []
@@ -94,10 +126,7 @@ def load_configs():
         for msg in validate(p.stem, cfg):
             problems.append(f"{p.name}: {msg}")
         cfgs.append(cfg)
-    dup = {c["slug"] for c in cfgs if "slug" in c
-           and sum(x.get("slug") == c["slug"] for x in cfgs) > 1}
-    if dup:
-        problems.append(f"slug 중복: {dup}")
+    problems += find_duplicates(cfgs)
     if problems:
         print("[오류] config 검증 실패:", file=sys.stderr)
         for msg in problems:
