@@ -28,6 +28,7 @@ test_smoke.py   # Playwright E2E: 입력→점→종합→추세선→저장 유
                 # 입력값은 config에서 모드 자동 감지 — 어느 slug든 인자로 주면 됨
 test_build.py   # build.py 검증 규칙 단위 테스트 + config.schema.json 드리프트 감지 (py test_build.py)
 coverage.md     # 위키 실험 전체 목록과 적합/조정필요/부적합 판정 — 백로그
+docs/           # README용 스크린샷 (index.png·summary.png)
 ```
 
 다른 HTML 프레젠테이션에 넣을 땐 iframe이 가장 쉽다 — 방법 3가지가
