@@ -27,6 +27,9 @@ dist/           # 산출물 (커밋함 — 교사가 빌드 없이 바로 쓰도
 test_smoke.py   # Playwright E2E: 입력→점→종합→추세선→저장 유지→지우기/되돌리기→내보내기
                 # 입력값은 config에서 모드 자동 감지 — 어느 slug든 인자로 주면 됨
 test_build.py   # build.py 검증 규칙 단위 테스트 + config.schema.json 드리프트 감지 (py test_build.py)
+                # + 산출물 드리프트 감지 (template.html·dist가 src/·configs 재조립 결과와 다르면 실패)
+requirements-dev.txt  # 테스트 의존성 (Playwright — E2E 전용, 빌드는 표준 라이브러리만)
+.github/workflows/ci.yml  # push/PR 시 재빌드→드리프트 검사→test_build.py (E2E는 로컬 전용)
 coverage.md     # 위키 실험 전체 목록과 적합/조정필요/부적합 판정 — 백로그
 docs/           # README용 스크린샷 (index.png·summary.png)
 ```
@@ -86,6 +89,7 @@ docs/           # README용 스크린샷 (index.png·summary.png)
 
 - **`src/`를 고친다** (template.html은 조립 산출물이라 재빌드 때 덮어써짐).
   고친 뒤 `py build.py`로 **전체 재빌드**해야 template.html·dist가 일관된다.
+  재빌드를 잊으면 test_build.py의 산출물 드리프트 테스트와 CI가 잡아준다.
 - 디자인 교체는 `src/template.css`의 디자인 토큰 블록만 바꾼다 — 다크 토큰이
   **A(OS 추종)·B(수동 토글) 두 블록**이므로 항상 둘 다 같은 값으로.
   차트 6색은 dataviz 검증(인접 CVD ΔE ≥ 12)을 통과한 팔레트 — 임의 교체 금지,

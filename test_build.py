@@ -174,6 +174,26 @@ def test_real_configs_all_pass():
         assert build.validate(p.stem, cfg) == [], f"{p.name}: {build.validate(p.stem, cfg)}"
 
 
+def test_artifacts_match_sources():
+    """커밋된 template.html·dist/가 src/·configs/ 재조립 결과와 일치해야 함
+    (재빌드 누락 드리프트 감지 — 산출물을 커밋하는 구조의 안전장치.
+    read_text가 줄바꿈을 \\n으로 정규화하므로 OS 무관)."""
+    rebuild = "py build.py 재빌드 후 함께 커밋할 것"
+    template = build.compose_template()
+    assert (ROOT / "template.html").read_text(encoding="utf-8") == template, \
+        f"template.html이 src/ 조립 결과와 다름 — {rebuild}"
+    cfgs = [json.loads(p.read_text(encoding="utf-8"))
+            for p in sorted((ROOT / "configs").glob("*.json"))]
+    for c in cfgs:
+        got = (ROOT / "dist" / f"{c['slug']}.html").read_text(encoding="utf-8")
+        assert got == build.build_app_html(template, c), \
+            f"dist/{c['slug']}.html이 config 재조립 결과와 다름 — {rebuild}"
+    assert (ROOT / "dist" / "index.html").read_text(encoding="utf-8") == build.index_html(cfgs), \
+        f"dist/index.html이 재조립 결과와 다름 — {rebuild}"
+    assert (ROOT / "dist" / "total.html").read_text(encoding="utf-8") == build.total_html(template, cfgs), \
+        f"dist/total.html이 재조립 결과와 다름 — {rebuild}"
+
+
 def main():
     tests = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

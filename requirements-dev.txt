@@ -1,0 +1,7 @@
+# 개발·테스트 의존성 — build.py·test_build.py는 표준 라이브러리만 사용(Python 3.x면 충분).
+# E2E(test_smoke.py)에만 Playwright가 필요하다.
+# 이 PC(Windows)에서는 Python 3.12에만 설치되어 있음:
+#   py -3.12 -m pip install -r requirements-dev.txt
+#   py -3.12 -m playwright install chromium
+#   py -3.12 test_smoke.py
+playwright>=1.40

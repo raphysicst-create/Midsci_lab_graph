@@ -39,8 +39,8 @@ DEFAULT_GROUPS = ["1조", "2조", "3조", "4조", "5조", "6조"]
 GRADE_ORDER = {"중1": 0, "중2": 1, "중3": 2}
 
 
-def assemble_template():
-    """src/ 세 파일을 한 HTML로 조립해 template.html에 쓰고 그 내용을 반환."""
+def compose_template():
+    """src/ 세 파일을 한 HTML 문자열로 조립 (파일 쓰기 없음 — 드리프트 검사에서도 사용)."""
     skel = (SRC / "skeleton.html").read_text(encoding="utf-8")
     parts = [("/* __CSS_INLINE__ */", (SRC / "template.css").read_text(encoding="utf-8")),
              ("// __JS_INLINE__", (SRC / "template.js").read_text(encoding="utf-8"))]
@@ -48,6 +48,12 @@ def assemble_template():
         if skel.count(marker) != 1:
             sys.exit(f"[오류] src/skeleton.html에 자리표시자 '{marker}'가 정확히 1개 있어야 함")
         skel = skel.replace(marker, content.rstrip("\n"))
+    return skel
+
+
+def assemble_template():
+    """조립 결과를 template.html에 쓰고 그 내용을 반환."""
+    skel = compose_template()
     (ROOT / "template.html").write_text(skel, encoding="utf-8")
     return skel
 
@@ -225,8 +231,8 @@ h2 { font-size:1.25rem; margin:30px 0 14px; border-bottom:2px solid var(--line);
 .card .summary { margin-top:8px; border-top:1px dashed var(--line); padding-top:8px; word-break:keep-all; }"""
 
 
-def build_index(cfgs):
-    html = f"""<!DOCTYPE html>
+def index_html(cfgs):
+    return f"""<!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>조별 실험 그래프 — 실험 선택</title>
@@ -238,7 +244,10 @@ def build_index(cfgs):
 {grade_sections(cfgs)}
 </body></html>
 """
-    (DIST / "index.html").write_text(html, encoding="utf-8")
+
+
+def build_index(cfgs):
+    (DIST / "index.html").write_text(index_html(cfgs), encoding="utf-8")
 
 
 # total.html 뼈대 — JS 중괄호가 많아 f-string 대신 자리표시자 치환 방식
@@ -290,19 +299,22 @@ document.getElementById("btn-back").addEventListener("click", () => {
 """
 
 
-def build_total(template, cfgs):
-    """전 실험 + 선택 화면을 한 파일에 담은 dist/total.html.
+def total_html(template, cfgs):
+    """전 실험 + 선택 화면을 한 파일에 담은 total.html 문자열.
     각 앱 HTML을 JSON으로 내장, 카드 클릭 시 iframe(srcdoc)으로 연다.
     저장 키는 개별 앱과 같은 slug 기반 localStorage라 데이터가 서로 이어진다."""
     apps = {c["slug"]: build_app_html(template, c) for c in cfgs}
     titles = {c["slug"]: c["title"].replace("\n", " ") for c in cfgs}
     payload = json.dumps({"apps": apps, "titles": titles}, ensure_ascii=False)
     payload = payload.replace("</", "<\\/")   # 스크립트 블록 보호 (JS 문자열 의미는 동일)
-    html = (TOTAL_PAGE
+    return (TOTAL_PAGE
             .replace("__CSS__", PAGE_CSS)
             .replace("__SECTIONS__", grade_sections(cfgs, total=True))
             .replace("__PAYLOAD__", payload))
-    (DIST / "total.html").write_text(html, encoding="utf-8")
+
+
+def build_total(template, cfgs):
+    (DIST / "total.html").write_text(total_html(template, cfgs), encoding="utf-8")
 
 
 def main():

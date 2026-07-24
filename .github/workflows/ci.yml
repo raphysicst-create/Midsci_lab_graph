@@ -1,0 +1,25 @@
+# 산출물 드리프트 방지 CI — template.html·dist/를 커밋하는 구조의 안전장치.
+# 재빌드 결과가 커밋본과 다르면(= src/·configs/ 수정 후 재빌드 누락) 실패한다.
+# E2E(test_smoke.py)는 로컬 전용 — Playwright 브라우저 설치 부담으로 CI에서 제외.
+# 줄바꿈: 저장소는 LF(autocrlf), ubuntu 빌드도 LF라 diff가 어긋나지 않는다.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 전체 재빌드 (config 검증 포함)
+        run: python build.py
+      - name: 산출물 드리프트 검사
+        run: git diff --exit-code -- template.html dist
+      - name: 단위 테스트 (검증 규칙·스키마 드리프트)
+        run: python test_build.py
