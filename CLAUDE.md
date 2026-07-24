@@ -107,3 +107,9 @@ docs/           # README용 스크린샷 (index.png·summary.png)
 - 템플릿의 `__CONFIG_START__`/`__CONFIG_END__` 마커를 지우지 않는다.
 - 교과서에 없는 측정값·단위를 `note` 표기 없이 config에 넣지 않는다.
 - `dist/`를 직접 손으로 편집하지 않는다 (항상 build.py 경유).
+
+## 브랜치 상태
+
+- `apple-design` · `apple-design-v2` — Apple 디자인 파일럿 실험(2026-07-20~21).
+  **폐기 확정** (2026-07-24, 사용자 결정). main에 병합하지 않으며, 이어서 작업하지
+  않는다. 브랜치는 참고 기록용으로만 남아 있음 — 완전히 지우려면 `git branch -D`.
