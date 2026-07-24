@@ -58,6 +58,17 @@ def test_xMaxHint_number():
     assert "xMaxHint" in errs(cfg)
 
 
+def test_xValues_rejects_bool():
+    """bool은 int의 하위형 — true/false가 xValues 숫자 검사를 통과하면 안 됨."""
+    assert "xValues" in errs(base(xValues=[True, 10, 15]))
+
+
+def test_numbers_reject_nonfinite():
+    """json.loads는 NaN/Infinity를 기본 허용 — 앱에 주입되면 차트 좌표가 깨진다."""
+    assert "xValues" in errs(base(xValues=[5, float("nan"), 15]))
+    assert "yMaxHint" in errs(base(yMaxHint=float("inf")))
+
+
 def test_maxPoints_positive_int():
     cfg = base(entryMode="free", xValues=None, xMaxHint=20)
     assert "maxPoints" in errs({**cfg, "maxPoints": 0})

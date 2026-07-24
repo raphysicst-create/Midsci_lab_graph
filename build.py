@@ -15,6 +15,7 @@
 config 스키마는 config.schema.json 참조. 검증 오류는 전부 모아 한 번에 보고한다.
 """
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -55,7 +56,9 @@ def validate(name, cfg):
     """config 1개의 오류 메시지 목록을 반환 (비어 있으면 통과)."""
     errs = []
     def num(v):
-        return isinstance(v, (int, float)) and not isinstance(v, bool)
+        # bool은 int의 하위형이라 명시 배제. json.loads가 NaN/Infinity를 허용하므로 유한성도 검사.
+        return (isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isfinite(v))
     unknown = [k for k in cfg if k not in KNOWN_FIELDS]
     if unknown:
         errs.append(f"알 수 없는 필드 {unknown} — 오타 확인 (config.schema.json 참조)")
@@ -88,7 +91,7 @@ def validate(name, cfg):
         if "ySeries" in cfg:
             errs.append("free 모드와 ySeries는 함께 쓸 수 없음")
     elif not (isinstance(cfg["xValues"], list) and len(cfg["xValues"]) >= 2
-              and all(isinstance(v, (int, float)) for v in cfg["xValues"])):
+              and all(num(v) for v in cfg["xValues"])):
         errs.append("xValues는 숫자 2개 이상의 리스트여야 함")
     if "ySeries" in cfg:
         if not (isinstance(cfg["ySeries"], list) and len(cfg["ySeries"]) == 2
