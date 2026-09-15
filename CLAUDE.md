@@ -1,6 +1,6 @@
 # 조별 실험 그래프 앱 생성기
 
-교과서 위키(`c:\Users\22\Desktop\Y-claude\textbook_wiki`)의 실험 페이지를 수업용
+교과서 위키(`c:\Users\USER\Desktop\Y-claude\textbook_wiki`)의 실험 페이지를 수업용
 그래프 프레젠테이션(단일 오프라인 HTML)으로 변환하는 워크플로우 프로젝트다.
 위키 repo **밖**에 있으며, 위키를 읽기만 하고 절대 수정하지 않는다.
 
