@@ -90,6 +90,7 @@ const CONFIG = {
       <span class="swatch"></span><span id="group-name"></span>
       <span style="font-weight:400; font-size:22px; color:var(--text-secondary)">측정 결과</span>
       <button class="mini-btn" id="btn-clear-group" type="button">이 조 지우기</button>
+      <button class="mini-btn" id="btn-group-trend" type="button" aria-pressed="false" hidden>추세선 보기</button>
     </div>
     <div class="scene-body">
       <div class="table-card">
@@ -98,6 +99,7 @@ const CONFIG = {
       </div>
       <div class="chart-card"><svg id="svg-group"></svg></div>
     </div>
+    <p class="trend-readout" id="group-trend-readout" aria-live="polite"></p>
   </section>
 
   <!-- 마지막 씬: 종합 — 모든 조 + 추세선 -->

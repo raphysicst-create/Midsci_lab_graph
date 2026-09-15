@@ -64,6 +64,7 @@ const state = {
   data: loadData(),
   visible: Array(G).fill(true),              // 종합 씬 조별 토글
   trendOn: false,
+  groupTrendOn: Array(G).fill(false),        // 조별 씬 추세선 토글
 };
 
 function loadData() {
@@ -365,15 +366,16 @@ function drawTrend(layer, chart, trend, animate) {
   }
 }
 
-/* 종합 씬 아래에 추세선을 말로 읽어주는 문구 */
-function trendReadout(trend, ptCount) {
+/* 씬 아래에 추세선을 말로 읽어주는 문구 */
+function trendReadout(trend, ptCount, group = null) {
   const tail = ` <span style="color:var(--text-muted)">(점 ${ptCount}개로 계산)</span>`;
   if (!trend) return "점이 2개 이상 있어야 추세선을 그릴 수 있습니다";
   if (trend.kind === "smooth") {
     const what = MODE === "dual"
       ? `<b>● ${esc(CONFIG.ySeries[0])}</b>: 실선 · <b>○ ${esc(CONFIG.ySeries[1])}</b>: 점선`
       : "";
-    return `추세선: 각 ${esc(CONFIG.xLabel)}에서 <b>학급 평균</b>을 부드럽게 이은 곡선${what ? " — " + what : ""}${tail}`;
+    const scope = group == null ? "학급 평균" : `${esc(CONFIG.groupNames[group])} 측정값의 평균`;
+    return `추세선: 각 ${esc(CONFIG.xLabel)}에서 <b>${scope}</b>을 부드럽게 이은 곡선${what ? " — " + what : ""}${tail}`;
   }
   const fit = trend.fit;
   if (fit.type === "inverse") {
@@ -525,7 +527,12 @@ function findOwnCircle(key) {
 /* 아직 날아가는 중인 점은 착지 전까지 차트에서 숨긴다 */
 const inFlight = new Set();
 
-function renderGroupChartOnly() {
+$("#btn-group-trend").addEventListener("click", () => {
+  state.groupTrendOn[state.group] = !state.groupTrendOn[state.group];
+  renderGroupChartOnly(state.groupTrendOn[state.group]);
+});
+
+function renderGroupChartOnly(animateTrend = false) {
   const g = state.group;
   const svg = $("#svg-group");
   groupChart = drawChart(svg, xMaxNow(), yMaxNow());
@@ -533,6 +540,20 @@ function renderGroupChartOnly() {
     if (p.g !== g) { drawPoint(groupChart.ptLayer, groupChart.s, p, { ghost: true }); continue; }
     const c = drawPoint(groupChart.ptLayer, groupChart.s, p);
     if (inFlight.has(c.dataset.key)) c.style.opacity = 0;
+  }
+  const on = !!CONFIG.trendline && state.groupTrendOn[g];
+  const btn = $("#btn-group-trend");
+  btn.hidden = !CONFIG.trendline;
+  btn.setAttribute("aria-pressed", String(on));
+  btn.textContent = on ? "추세선 숨기기" : "추세선 보기";
+  const readout = $("#group-trend-readout");
+  if (on) {
+    const pts = allPoints().filter(p => p.g === g);
+    const trend = computeTrend(pts);
+    drawTrend(groupChart.trendLayer, groupChart, trend, animateTrend);
+    readout.innerHTML = trendReadout(trend, pts.length, g);
+  } else {
+    readout.textContent = "";
   }
 }
 
@@ -731,6 +752,7 @@ function doClear(groupIdx) {
     state.data = emptyData();
     state.visible = Array(G).fill(true);
     state.trendOn = false;
+    state.groupTrendOn.fill(false);
   } else {
     state.data[groupIdx] = emptyRow();
   }

@@ -86,6 +86,41 @@ def run_app(page, slug):
     own = page.locator("#svg-group circle.pt:not(.ghost)")
     assert own.count() >= points, f"조별 씬 점 {own.count()}개 < {points}개"
 
+    # 조별 추세선: 토글, 입력 변경, 다른 조 데이터 제외, 조별 보기 상태 유지
+    group_trends = page.locator("#svg-group path.trendline")
+    group_toggle = page.locator("#btn-group-trend")
+    if trend_paths:
+        group_toggle.click()
+        expect(group_toggle).to_have_attribute("aria-pressed", "true")
+        expect(group_trends).to_have_count(trend_paths)
+        expect(page.locator("#group-trend-readout")).to_contain_text(f"점 {points}개로 계산")
+        original_path = group_trends.last.get_attribute("d")
+        # 마지막 입력은 모든 입력 모드에서 y값이다.
+        inputs.nth(len(values) - 1).fill(str(float(values[-1]) * 0.8))
+        inputs.nth(len(values) - 1).press("Tab")
+        assert group_trends.last.get_attribute("d") != original_path
+        inputs.nth(len(values) - 1).fill(values[-1])
+        inputs.nth(len(values) - 1).press("Tab")
+        group_toggle.click()
+        expect(group_trends).to_have_count(0)
+        expect(page.locator("#group-trend-readout")).to_be_empty()
+        group_toggle.click()
+        page.locator("#btn-next").click()
+        expect(group_toggle).to_have_attribute("aria-pressed", "false")
+        group_toggle.click()
+        expect(group_trends).to_have_count(0)  # 1조 잔상은 계산에서 제외
+        expect(page.locator("#group-trend-readout")).to_contain_text("2개 이상")
+        for k, v in enumerate(values):
+            inputs.nth(k).fill(str(float(v) * 0.5))
+            inputs.nth(k).press("Tab")
+        expect(group_trends).to_have_count(trend_paths)
+        expect(page.locator("#group-trend-readout")).to_contain_text(f"점 {points}개로 계산")
+        page.locator("#btn-prev").click()
+        expect(group_toggle).to_have_attribute("aria-pressed", "true")
+        assert group_trends.last.get_attribute("d") == original_path
+    else:
+        expect(group_toggle).to_be_hidden()
+
     # 3. 종합 씬으로 이동 (다음 버튼 반복)
     while page.locator("#btn-next").is_enabled():
         page.locator("#btn-next").click()
@@ -107,10 +142,15 @@ def run_app(page, slug):
     expect(page.locator("#group-table input").first).to_have_value(values[0])
 
     # 6. 조별 지우기 → 되돌리기
+    if trend_paths:
+        group_toggle.click()
     page.locator("#btn-clear-group").click()
     expect(page.locator("#group-table input").first).to_have_value("")
+    expect(group_trends).to_have_count(0)
     page.locator("#btn-undo").click()
     expect(page.locator("#group-table input").first).to_have_value(values[0])
+    if trend_paths:
+        expect(group_trends).to_have_count(trend_paths)
 
     # 7. 내보내기 — CSV·PNG 다운로드가 실제로 발생하는가
     for btn, ext in (("#btn-csv", ".csv"), ("#btn-png", ".png")):
