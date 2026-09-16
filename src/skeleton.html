@@ -68,8 +68,9 @@ const CONFIG = {
 <header class="app-bar">
   <span id="bar-title"></span>
   <span class="spacer"></span>
+  <button id="btn-groups" type="button">조 개수</button>
   <button id="btn-csv" type="button" title="측정값을 CSV(엑셀)로 저장">⬇ CSV</button>
-  <button id="btn-png" type="button" title="종합 그래프를 그림(PNG)으로 저장">⬇ 그림</button>
+  <button id="btn-png" type="button" title="제목·범례·그래프·설명을 포함한 종합 화면을 PNG로 저장">⬇ 그림</button>
   <button id="btn-theme" type="button" aria-label="밝은/어두운 테마 전환">🌓</button>
   <button id="btn-fullscreen" type="button">⛶ 전체화면</button>
   <button id="btn-reset" type="button">전체 지우기</button>
@@ -119,6 +120,17 @@ const CONFIG = {
   <div class="dots" id="dots"></div>
   <button class="nav-btn" id="btn-next" type="button">다음 ▶</button>
 </nav>
+
+<dialog id="group-setup" aria-labelledby="group-setup-title" aria-describedby="group-setup-help">
+  <form id="group-setup-form">
+    <h2 id="group-setup-title">몇 조가 실험하나요?</h2>
+    <p id="group-setup-help">선택한 조 수만큼 입력 화면과 그래프를 준비합니다.</p>
+    <label for="group-count">조 개수</label>
+    <select id="group-count" name="group-count" autofocus></select>
+    <p class="setup-note">조 개수는 나중에도 바꿀 수 있습니다.<br>조 수를 줄여도 기존 입력값은 보관됩니다.</p>
+    <button id="btn-start" type="submit">실험 시작</button>
+  </form>
+</dialog>
 
 <!-- 점 위 마우스·포커스·탭에 뜨는 값 표시 -->
 <div id="tooltip"></div>

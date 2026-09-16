@@ -14,6 +14,7 @@
    1. 디자인 토큰 — 디자인을 바꿀 땐 이 블록(+아래 다크 2블록)만 교체.
    조별 6색은 색약 검증(인접 CVD ΔE ≥ 12)을 통과한 팔레트 — 순서 고정,
    순환 금지, 임의 교체 금지 (dataviz validate_palette.js로 재검증할 것).
+   7~10조 확장색: 기존 6색 유지. Machado CVD 3종 + CIELAB 인접 ΔE ≥ 12 확인.
    ============================================================ */
 :root {
   /* 표면·잉크 */
@@ -32,6 +33,10 @@
   --series-4: #008300;  /* green  */
   --series-5: #4a3aa7;  /* violet */
   --series-6: #e34948;  /* red    */
+  --series-7: #493011;  /* brown  */
+  --series-8: #c43d99;  /* magenta */
+  --series-9: #00545b;  /* teal   */
+  --series-10: #24262c; /* gray   */
   --trend:    #0b0b0b;  /* 추세선 */
   /* 타이포 (빔프로젝터용 큰 글씨) */
   --font: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
@@ -60,6 +65,10 @@
     --series-4: #008300;
     --series-5: #9085e9;
     --series-6: #e66767;
+    --series-7: #edc691;
+    --series-8: #ec75c1;
+    --series-9: #29939c;
+    --series-10: #eee6db;
     --trend:    #ffffff;
   }
 }
@@ -79,6 +88,10 @@
   --series-4: #008300;
   --series-5: #9085e9;
   --series-6: #e66767;
+  --series-7: #edc691;
+  --series-8: #ec75c1;
+  --series-9: #29939c;
+  --series-10: #eee6db;
   --trend:    #ffffff;
 }
 
@@ -123,6 +136,34 @@ header.app-bar button {
 header.app-bar button:hover { color: var(--text-primary); }
 
 main.stage { flex: 1; position: relative; min-height: 0; }
+
+/* 실험별 첫 실행 · 조 개수 변경 */
+#group-setup {
+  margin: auto;
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 32px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 64px rgba(0,0,0,.2);
+}
+#group-setup::backdrop { background: rgba(0,0,0,.4); }
+#group-setup h2 { font-size: 28px; margin-bottom: 12px; }
+#group-setup p { color: var(--text-secondary); font-size: 17px; line-height: 1.6; word-break: keep-all; }
+#group-setup label { display: block; margin: 24px 0 8px; font-weight: 600; }
+#group-count, #btn-start {
+  width: 100%;
+  padding: 12px 16px;
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+#group-count { color: var(--text-primary); background: var(--page); }
+#group-setup .setup-note { font-size: 14px; margin: 12px 0 24px; }
+#btn-start { color: var(--surface-1); background: var(--text-primary); cursor: pointer; }
+#group-setup :focus-visible { outline: 3px solid var(--series-1); outline-offset: 3px; }
 
 section.scene {
   position: absolute;

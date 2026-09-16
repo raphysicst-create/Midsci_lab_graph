@@ -44,6 +44,37 @@ def test_valid_free_passes():
     assert errs(cfg) == ""
 
 
+def test_entryMode_enum():
+    for bad in ("fre", "fixed", "", None, False, 0, [], {}):
+        # base()는 None을 필드 삭제로 취급하므로 명시적 null은 직접 주입한다.
+        cfg = {**base(), "entryMode": bad}
+        assert "entryMode" in errs(cfg), f"entryMode={bad!r} 통과하면 안 됨"
+    cfg = base(entryMode="fre", xValues=None)
+    assert "entryMode" in errs(cfg), "필수 필드가 없어도 모드 오타를 보고해야 함"
+
+
+def test_trendline_enum():
+    for good in ("proportional", "linear", "inverse", "smooth", False):
+        assert errs(base(trendline=good)) == ""
+    for bad in (0, 0.0, True, 1, "false", "", None, [], {}):
+        cfg = {**base(), "trendline": bad}
+        assert "trendline" in errs(cfg), f"trendline={bad!r} 통과하면 안 됨"
+    for good in (False, "smooth"):
+        assert errs(base(ySeries=["물", "식용유"], trendline=good)) == ""
+    assert "trendline" in errs(base(ySeries=["물", "식용유"], trendline=0))
+
+
+def test_trendPower_enum():
+    # 스키마의 enum은 필드가 있으면 모드와 무관하게 적용된다.
+    for trend in ("inverse", "proportional", False):
+        assert errs(base(trendline=trend)) == ""  # 생략하면 기존 기본값 유지
+        for good in (1, 2, 1.0, 2.0):
+            assert errs(base(trendline=trend, trendPower=good)) == ""
+        for bad in (True, False, 0, 3, 1.5, "1", None, [], {}, float("inf"), float("nan")):
+            cfg = {**base(trendline=trend), "trendPower": bad}
+            assert "trendPower" in errs(cfg), f"trendPower={bad!r} 통과하면 안 됨"
+
+
 def test_grade_enum():
     assert "grade" in errs(base(grade="고1"))
     assert "grade" in errs(base(grade=1))
@@ -160,6 +191,8 @@ def test_schema_matches_build():
     props = schema["properties"]
     assert set(props) == set(build.KNOWN_FIELDS)
     assert set(props["trendline"]["enum"]) == set(build.TRENDLINES)
+    assert props["entryMode"]["enum"] == ["free"]
+    assert props["trendPower"]["enum"] == [1, 2]
     assert set(props["grade"]["enum"]) == set(build.GRADE_ORDER)
     # 조건부 필수: free면 xMaxHint, 아니면 xValues
     conds = schema.get("allOf", [])

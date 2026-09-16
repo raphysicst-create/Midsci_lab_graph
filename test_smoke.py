@@ -5,7 +5,7 @@
   도입 씬 제목 → 조별 입력·점 생성 → 종합 씬 → 추세선(수식/smooth) →
   새로고침 후 저장 유지 → 조별 지우기 → 되돌리기 → CSV/PNG 내보내기
 기본 실행이면 추가로:
-  config 문자열 이스케이프(라벨에 <·& 있어도 마크업 안 깨짐) ·
+  1~10조 선택·변경·기존 데이터 보존 · config 문자열 이스케이프 ·
   localStorage 쓰기가 막힌 환경(시크릿 모드 등)에서도 입력 흐름 유지 + 경고 토스트 ·
   total.html(단일 파일 모음)에서 내장 앱 열기·입력·재열람 유지
 
@@ -17,8 +17,11 @@
 사전 준비: py build.py 로 dist/ 최신화, pip install playwright + playwright install chromium
 """
 import json
+import base64
+import struct
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, expect
@@ -71,6 +74,10 @@ def run_app(page, slug):
     page.goto(url)
     page.evaluate("localStorage.clear()")   # 이전 실행의 저장값 제거
     page.reload()
+
+    # 첫 실행에서 조 수를 선택하면 선택한 조만 내비게이션에 나타난다.
+    choose_groups(page, 3)
+    expect(page.locator("#dots button")).to_have_count(5)
 
     # 1. 도입 씬 — 제목·축이 그려졌는가
     expect(page.locator("#intro-title")).not_to_have_text("")
@@ -125,6 +132,7 @@ def run_app(page, slug):
     while page.locator("#btn-next").is_enabled():
         page.locator("#btn-next").click()
     expect(page.locator("#scene-summary")).to_have_class("scene active")
+    expect(page.locator("#legend .chip:not(.info):not(.trend-chip)")).to_have_count(3)
     page.wait_for_timeout(1200)             # 조별 등장 시차 대기
     assert page.locator("#svg-summary circle.pt").count() >= points
 
@@ -138,6 +146,8 @@ def run_app(page, slug):
 
     # 5. 새로고침 — 입력값이 localStorage에서 복원되는가
     page.reload()
+    expect(page.locator("#group-setup")).not_to_be_visible()
+    expect(page.locator("#dots button")).to_have_count(5)
     page.locator("#btn-next").click()
     expect(page.locator("#group-table input").first).to_have_value(values[0])
 
@@ -162,6 +172,157 @@ def run_app(page, slug):
     print(f"  통과: {slug}")
 
 
+def choose_groups(app, count):
+    expect(app.locator("#group-setup")).to_be_visible()
+    app.locator("#group-count").select_option(str(count))
+    app.locator("#btn-start").click()
+    expect(app.locator("#group-setup")).not_to_be_visible()
+
+
+def check_summary_png(browser):
+    """다운로드한 PNG의 내용·테마·크기와 저장 중 씬/데이터 보존 확인."""
+    for theme, width, height, groups in (("light", 1280, 720, 10),
+                                         ("dark", 640, 480, 10),
+                                         ("light", 1280, 720, 1)):
+        page = browser.new_page(viewport={"width": width, "height": height})
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto((DIST / "thermal_eq.html").as_uri())
+        choose_groups(page, groups)
+        page.evaluate("""({theme, groups}) => {
+          document.documentElement.dataset.theme = theme;
+          if (groups === 10) {
+            for (let g = 0; g < G; g++) {
+              state.data[g][0] = [60 + g, 20 + g];
+              state.data[g][1] = [55 + g, 25 + g];
+            }
+            state.visible[9] = false;
+            state.trendOn = true;
+          }
+          // 종합 씬에서 점/추세선 등장 직전에 눌러도 완성본이어야 한다.
+          // 작은 창은 조별 씬, 빈 데이터는 도입 씬에서도 저장한다.
+          showScene(groups === 1 ? 0 : theme === 'dark' ? 1 : SCENES - 1);
+          const serialize = XMLSerializer.prototype.serializeToString;
+          XMLSerializer.prototype.serializeToString = function(node) {
+            const xml = serialize.call(this, node);
+            window.exportedXML = xml;
+            return xml;
+          };
+        }""", {"theme": theme, "groups": groups})
+        before = page.evaluate("JSON.stringify(state)")
+        with page.expect_download() as dl:
+            page.locator("#btn-png").click()
+        assert dl.value.suggested_filename == "thermal_eq.png"
+        png = Path(dl.value.path()).read_bytes()
+        assert png[:8] == b"\x89PNG\r\n\x1a\n"
+        image_width, image_height = struct.unpack(">II", png[16:24])
+        svg = ET.fromstring(page.evaluate("window.exportedXML"))
+        assert image_width == int(svg.attrib["width"]) * 2
+        assert image_height == int(svg.attrib["height"]) * 2
+        nodes = list(svg.iter())
+        text = "".join(svg.itertext())
+        for label in ("온도가 다른 두 물체의 열평형", "모든 조의 결과를 한 그래프에",
+                      "뜨거운 물", "찬 물", "1조"):
+            assert label in text, f"PNG에서 {label} 누락"
+        points = [n for n in nodes if "pt" in n.attrib.get("class", "").split()]
+        trends = [n for n in nodes if "trendline" in n.attrib.get("class", "").split()]
+        assert len(points) == (36 if groups == 10 else 0)
+        assert len(trends) == (2 if groups == 10 else 0)
+        if groups == 10:
+            assert "10조" in text and "점 36개로 계산" in text
+            assert not any(n.attrib.get("data-key", "").startswith("9:") for n in points)
+        assert "전체 지우기" not in text and "다음 ▶" not in text
+        # SVG 직렬화만 성공하고 실제 그림이 비어 있는 경우도 잡는다.
+        pixels = page.evaluate("""async data => {
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve; img.onerror = reject;
+            img.src = 'data:image/png;base64,' + data;
+          });
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width; canvas.height = img.height;
+          const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0);
+          const bg = Array.from(ctx.getImageData(0, 0, 1, 1).data);
+          const band = ctx.getImageData(88, 40, img.width - 176, 240).data;
+          let ink = 0;
+          for (let i = 0; i < band.length; i += 4)
+            if (band[i + 3] === 255 && Math.abs(band[i] - bg[0]) > 60) ink++;
+          return {bg, ink};
+        }""", base64.b64encode(png).decode("ascii"))
+        assert pixels["bg"] == ([13, 13, 13, 255] if theme == "dark" else [249, 249, 247, 255])
+        assert pixels["ink"] > 500, "PNG에 제목/범례가 실제로 그려지지 않음"
+        assert page.evaluate("JSON.stringify(state)") == before, "PNG 저장이 앱 상태를 변경함"
+        expect(page.locator("#btn-png")).to_be_enabled()
+        assert page.locator("section.scene").count() == 3, "내보내기 임시 씬이 남음"
+        assert not errors, errors
+        page.close()
+    print("  통과: 종합 화면 PNG (10조·2계열·라이트/다크·작은 창·빈 데이터)")
+
+
+def check_group_setup(browser):
+    """기존 6조 데이터 보존, 조 수 변경, 키보드, 실험별 독립 저장 확인."""
+    page = browser.new_page()
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto((DIST / "spring_force.html").as_uri())
+    page.evaluate("""() => {
+      localStorage.clear();
+      const data = Array.from({length: 6}, () => CONFIG.xValues.map(() => null));
+      data[0][0] = 2;
+      data[5][0] = 9;
+      localStorage.setItem('group_graph::' + CONFIG.title, JSON.stringify(data));
+    }""")
+    page.reload()
+    page.locator("#group-count").press("Escape")
+    expect(page.locator("#group-setup")).to_be_visible()
+    page.locator("#group-count").press("ArrowRight")
+    expect(page.locator("#scene-intro")).to_have_class("scene active")
+    choose_groups(page, 1)
+    expect(page.locator("#dots button")).to_have_count(3)
+    page.locator("#btn-next").click()
+    expect(page.locator("#group-table input").first).to_have_value("2")
+    page.locator("#btn-next").click()
+    expect(page.locator("#scene-summary")).to_have_class("scene active")
+    expect(page.locator("#svg-summary circle.pt")).to_have_count(1)
+    expect(page.locator("#legend .chip:not(.trend-chip)")).to_have_count(1)
+    with page.expect_download() as dl:
+        page.locator("#btn-csv").click()
+    csv = Path(dl.value.path()).read_text(encoding="utf-8-sig")
+    assert "1조," in csv and "6조," not in csv, "숨긴 조가 CSV에 포함됨"
+    page.reload()
+    expect(page.locator("#group-setup")).not_to_be_visible()
+    expect(page.locator("#dots button")).to_have_count(3)
+    page.locator("#btn-groups").click()
+    expect(page.locator("#group-count")).to_have_value("1")
+    choose_groups(page, 10)
+    expect(page.locator("#dots button")).to_have_count(12)
+    page.get_by_role("button", name="6조 씬으로 이동", exact=True).click()
+    expect(page.locator("#group-table input").first).to_have_value("9")
+    page.get_by_role("button", name="10조 씬으로 이동", exact=True).click()
+    page.locator("#group-table input").first.fill("7")
+    page.locator("#group-table input").first.press("Tab")
+    expect(page.locator("#svg-group circle.pt:not(.ghost)")).to_have_count(1)
+    assert page.locator("#svg-group circle.pt:not(.ghost)").evaluate(
+        "el => getComputedStyle(el).fill") == "rgb(36, 38, 44)"
+    page.locator("#btn-groups").click()
+    page.locator("#group-count").press("Escape")
+    expect(page.locator("#group-setup")).not_to_be_visible()
+    expect(page.locator("#group-name")).to_have_text("10조")
+    page.goto((DIST / "density.html").as_uri())
+    choose_groups(page, 2)
+    page.goto((DIST / "spring_force.html").as_uri())
+    expect(page.locator("#dots button")).to_have_count(12)
+    page.get_by_role("button", name="10조 씬으로 이동", exact=True).click()
+    expect(page.locator("#group-table input").first).to_have_value("7")
+    # 손상된 설정은 첫 실행 팝업으로 복구한다.
+    page.evaluate("localStorage.setItem('group_graph::spring_force::groupCount', '99')")
+    page.reload()
+    choose_groups(page, 3)
+    assert not errors, errors
+    page.close()
+    print("  통과: 조 개수 선택·변경·기존 데이터 보존")
+
+
 def check_escaping(browser):
     """config 문자열에 <·&·따옴표가 있어도 앱 마크업이 깨지지 않는가."""
     cfg = {
@@ -180,6 +341,7 @@ def check_escaping(browser):
         probe = Path(td) / "esc_probe.html"
         probe.write_text(html, encoding="utf-8")
         page.goto(probe.as_uri())
+        choose_groups(page, 6)
         # 제목이 통째로 살아 있으면 </script> 방어가 동작한 것
         expect(page.locator("#intro-title")).to_have_text(cfg["title"])
         assert "속도<m>" in page.locator("#intro-hint").inner_text(), "도입 안내에서 라벨 태그 소실"
@@ -201,6 +363,7 @@ def check_storage_blocked(browser):
     page.add_init_script(
         "Storage.prototype.setItem = function () { throw new Error('blocked'); };")
     page.goto((DIST / "spring_force.html").as_uri())
+    choose_groups(page, 2)
     page.locator("#btn-next").click()
     inputs = page.locator("#group-table input")
     inputs.nth(0).fill("2.5")
@@ -232,6 +395,8 @@ def check_total(browser):
     expect(page.locator("#viewer")).to_be_visible()
     app = page.frame_locator("#viewer-frame")
     expect(app.locator("#intro-title")).not_to_have_text("")
+    choose_groups(app, 2)
+    expect(app.locator("#dots button")).to_have_count(4)
     app.locator("#btn-next").click()
     inp = app.locator("#group-table input").first
     inp.fill("4")
@@ -242,8 +407,13 @@ def check_total(browser):
     page.locator("#btn-back").click()          # 목록으로 → 다시 열면 저장값 복원
     expect(page.locator("#viewer")).to_be_hidden()
     page.locator('[data-slug="spring_force"]').click()
+    expect(app.locator("#group-setup")).not_to_be_visible()
+    expect(app.locator("#dots button")).to_have_count(4)
     app.locator("#btn-next").click()
     expect(app.locator("#group-table input").first).to_have_value("4")
+    with page.expect_download() as dl:
+        app.locator("#btn-png").click()
+    assert Path(dl.value.path()).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     page.close()
     print("  통과: 단일 파일 모음 (total.html)")
 
@@ -256,7 +426,9 @@ def main():
         for slug in slugs:
             run_app(page, slug)
         page.close()
-        if len(sys.argv) <= 1:                 # 기본 실행에서만 공통 점검 3종
+        if len(sys.argv) <= 1:                 # 기본 실행에서만 공통 점검
+            check_summary_png(browser)
+            check_group_setup(browser)
             check_escaping(browser)
             check_storage_blocked(browser)
             check_total(browser)

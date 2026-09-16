@@ -68,15 +68,19 @@ def validate(name, cfg):
     unknown = [k for k in cfg if k not in KNOWN_FIELDS]
     if unknown:
         errs.append(f"알 수 없는 필드 {unknown} — 오타 확인 (config.schema.json 참조)")
+    if "entryMode" in cfg and cfg["entryMode"] != "free":
+        errs.append("entryMode는 free만 가능 (고정 x 모드는 필드 생략)")
     free = cfg.get("entryMode") == "free"
     required = [k for k in REQUIRED if not (free and k == "xValues")]
     missing = [k for k in required if k not in cfg]
     if missing:
         errs.append(f"필수 필드 누락 {missing}")
         return errs                      # 필수가 빠지면 나머지 검사는 무의미
-    if cfg["trendline"] not in TRENDLINES:
+    # Python에서는 0 == False, True == 1이므로 enum의 타입도 확인한다.
+    if not (cfg["trendline"] is False or
+            (isinstance(cfg["trendline"], str) and cfg["trendline"] in TRENDLINES)):
         errs.append("trendline은 proportional|linear|inverse|smooth|false 여야 함")
-    if cfg["trendline"] == "inverse" and cfg.get("trendPower") not in (None, 1, 2):
+    if "trendPower" in cfg and not (num(cfg["trendPower"]) and cfg["trendPower"] in (1, 2)):
         errs.append("trendPower는 1 또는 2")
     if cfg["grade"] not in GRADE_ORDER:
         errs.append(f"grade는 {'|'.join(GRADE_ORDER)} 중 하나 ({cfg['grade']!r})")
@@ -104,7 +108,7 @@ def validate(name, cfg):
                 and all(isinstance(s, str) for s in cfg["ySeries"])):
             errs.append("ySeries는 문자열 2개 리스트 (마커 ●/○ 2계열만 지원)")
         # 두 계열을 하나의 수식으로 적합하면 안 됨 — 계열별 평균 곡선(smooth)만 허용
-        if cfg["trendline"] not in (False, "smooth"):
+        if not (cfg["trendline"] is False or cfg["trendline"] == "smooth"):
             errs.append("ySeries에는 trendline: false 또는 \"smooth\"만 가능")
     if not UNIT_RE.fullmatch(str(cfg["unit"])):
         errs.append(f"unit은 'N단원_이름' 형식이어야 함 (예: 3단원_열) — {cfg['unit']!r}")

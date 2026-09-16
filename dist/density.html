@@ -39,6 +39,7 @@
    1. 디자인 토큰 — 디자인을 바꿀 땐 이 블록(+아래 다크 2블록)만 교체.
    조별 6색은 색약 검증(인접 CVD ΔE ≥ 12)을 통과한 팔레트 — 순서 고정,
    순환 금지, 임의 교체 금지 (dataviz validate_palette.js로 재검증할 것).
+   7~10조 확장색: 기존 6색 유지. Machado CVD 3종 + CIELAB 인접 ΔE ≥ 12 확인.
    ============================================================ */
 :root {
   /* 표면·잉크 */
@@ -57,6 +58,10 @@
   --series-4: #008300;  /* green  */
   --series-5: #4a3aa7;  /* violet */
   --series-6: #e34948;  /* red    */
+  --series-7: #493011;  /* brown  */
+  --series-8: #c43d99;  /* magenta */
+  --series-9: #00545b;  /* teal   */
+  --series-10: #24262c; /* gray   */
   --trend:    #0b0b0b;  /* 추세선 */
   /* 타이포 (빔프로젝터용 큰 글씨) */
   --font: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
@@ -85,6 +90,10 @@
     --series-4: #008300;
     --series-5: #9085e9;
     --series-6: #e66767;
+    --series-7: #edc691;
+    --series-8: #ec75c1;
+    --series-9: #29939c;
+    --series-10: #eee6db;
     --trend:    #ffffff;
   }
 }
@@ -104,6 +113,10 @@
   --series-4: #008300;
   --series-5: #9085e9;
   --series-6: #e66767;
+  --series-7: #edc691;
+  --series-8: #ec75c1;
+  --series-9: #29939c;
+  --series-10: #eee6db;
   --trend:    #ffffff;
 }
 
@@ -148,6 +161,34 @@ header.app-bar button {
 header.app-bar button:hover { color: var(--text-primary); }
 
 main.stage { flex: 1; position: relative; min-height: 0; }
+
+/* 실험별 첫 실행 · 조 개수 변경 */
+#group-setup {
+  margin: auto;
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 32px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 64px rgba(0,0,0,.2);
+}
+#group-setup::backdrop { background: rgba(0,0,0,.4); }
+#group-setup h2 { font-size: 28px; margin-bottom: 12px; }
+#group-setup p { color: var(--text-secondary); font-size: 17px; line-height: 1.6; word-break: keep-all; }
+#group-setup label { display: block; margin: 24px 0 8px; font-weight: 600; }
+#group-count, #btn-start {
+  width: 100%;
+  padding: 12px 16px;
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+#group-count { color: var(--text-primary); background: var(--page); }
+#group-setup .setup-note { font-size: 14px; margin: 12px 0 24px; }
+#btn-start { color: var(--surface-1); background: var(--text-primary); cursor: pointer; }
+#group-setup :focus-visible { outline: 3px solid var(--series-1); outline-offset: 3px; }
 
 section.scene {
   position: absolute;
@@ -509,8 +550,9 @@ const CONFIG = {
 <header class="app-bar">
   <span id="bar-title"></span>
   <span class="spacer"></span>
+  <button id="btn-groups" type="button">조 개수</button>
   <button id="btn-csv" type="button" title="측정값을 CSV(엑셀)로 저장">⬇ CSV</button>
-  <button id="btn-png" type="button" title="종합 그래프를 그림(PNG)으로 저장">⬇ 그림</button>
+  <button id="btn-png" type="button" title="제목·범례·그래프·설명을 포함한 종합 화면을 PNG로 저장">⬇ 그림</button>
   <button id="btn-theme" type="button" aria-label="밝은/어두운 테마 전환">🌓</button>
   <button id="btn-fullscreen" type="button">⛶ 전체화면</button>
   <button id="btn-reset" type="button">전체 지우기</button>
@@ -561,6 +603,17 @@ const CONFIG = {
   <button class="nav-btn" id="btn-next" type="button">다음 ▶</button>
 </nav>
 
+<dialog id="group-setup" aria-labelledby="group-setup-title" aria-describedby="group-setup-help">
+  <form id="group-setup-form">
+    <h2 id="group-setup-title">몇 조가 실험하나요?</h2>
+    <p id="group-setup-help">선택한 조 수만큼 입력 화면과 그래프를 준비합니다.</p>
+    <label for="group-count">조 개수</label>
+    <select id="group-count" name="group-count" autofocus></select>
+    <p class="setup-note">조 개수는 나중에도 바꿀 수 있습니다.<br>조 수를 줄여도 기존 입력값은 보관됩니다.</p>
+    <button id="btn-start" type="submit">실험 시작</button>
+  </form>
+</dialog>
+
 <!-- 점 위 마우스·포커스·탭에 뜨는 값 표시 -->
 <div id="tooltip"></div>
 
@@ -600,12 +653,16 @@ const CONFIG = {
 /* ============================================================
    §1 환경·상태·저장
    ============================================================ */
-const G = CONFIG.groupNames.length;          // 조 수
+const MAX_GROUPS = 10;
+const ALL_GROUP_NAMES = Array.from({ length: MAX_GROUPS },
+  (_, i) => CONFIG.groupNames[i] ?? `${i + 1}조`);
+let G = Math.max(1, Math.min(MAX_GROUPS, CONFIG.groupNames.length));
+let groupNames = ALL_GROUP_NAMES.slice(0, G);
 /* 입력 모드: fixed(고정 x, y 1개) | dual(고정 x, y 2계열) | free(x·y 자유 입력) */
 const MODE = CONFIG.entryMode === "free" ? "free"
   : (Array.isArray(CONFIG.ySeries) && CONFIG.ySeries.length === 2 ? "dual" : "fixed");
 const N = MODE === "free" ? (CONFIG.maxPoints || 5) : CONFIG.xValues.length;   // 행 수
-const SCENES = 1 + G + 1;                    // 도입 + 조별 + 종합
+let SCENES = 1 + G + 1;                      // 도입 + 조별 + 종합
 
 /* OS "움직임 줄이기" 설정 — 켜져 있으면 점 비행·드로잉 애니메이션을 건너뜀 */
 const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -614,12 +671,22 @@ const REDUCED_MOTION = matchMedia("(prefers-reduced-motion: reduce)").matches;
    예전 버전은 제목 기반 키였으므로 있으면 1회 옮겨온다. */
 const STORE_KEY = "group_graph::" + (CONFIG.slug || CONFIG.title);
 const LEGACY_KEY = "group_graph::" + CONFIG.title;
+const GROUP_COUNT_KEY = STORE_KEY + "::groupCount";
 
 /* localStorage가 막힌 환경(시크릿 모드·잠긴 프로필)에서도 앱은 계속 동작해야 한다 */
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
 };
+
+const savedGroupCount = Number(store.get(GROUP_COUNT_KEY));
+let groupsConfigured = Number.isInteger(savedGroupCount) &&
+  savedGroupCount >= 1 && savedGroupCount <= ALL_GROUP_NAMES.length;
+if (groupsConfigured) {
+  G = savedGroupCount;
+  groupNames = ALL_GROUP_NAMES.slice(0, G);
+  SCENES = G + 2;
+}
 
 if (LEGACY_KEY !== STORE_KEY && !store.get(STORE_KEY)) {
   const legacy = store.get(LEGACY_KEY);
@@ -629,7 +696,8 @@ if (LEGACY_KEY !== STORE_KEY && !store.get(STORE_KEY)) {
 /* 저장 셀 모양 — fixed: y값|null, dual: [y1,y2], free: [x,y] */
 const emptyCell = () => (MODE === "fixed" ? null : [null, null]);
 const emptyRow = () => Array.from({ length: N }, emptyCell);
-const emptyData = () => Array.from({ length: G }, emptyRow);
+// 숨긴 조도 보관해서 조 수를 다시 늘리면 기존 측정값을 복원한다.
+const emptyData = () => Array.from({ length: ALL_GROUP_NAMES.length }, emptyRow);
 
 const state = {
   scene: 0,
@@ -647,15 +715,19 @@ function loadData() {
       ? (c === null || typeof c === "number")
       : (Array.isArray(c) && c.length === 2 &&
          c.every(v => v === null || typeof v === "number"));
-    if (Array.isArray(raw) && raw.length === G &&
+    if (Array.isArray(raw) && raw.length >= 1 && raw.length <= MAX_GROUPS &&
         raw.every(r => Array.isArray(r) && r.length === N && r.every(cellOk)))
-      return raw;
+      return Array.from({ length: MAX_GROUPS }, (_, g) => raw[g] || emptyRow());
   } catch (e) { /* 깨진 저장값은 무시하고 초기화 */ }
   return emptyData();
 }
 let saveWarned = false;
 function saveData() {
-  if (store.set(STORE_KEY, JSON.stringify(state.data)) || saveWarned) return;
+  if (store.set(STORE_KEY, JSON.stringify(state.data))) return;
+  warnSaveFailure();
+}
+function warnSaveFailure() {
+  if (saveWarned) return;
   saveWarned = true;                             // 경고는 1회만 — 입력 자체는 계속된다
   showToast("이 브라우저에선 저장이 안 됩니다 — 입력값은 새로고침하면 사라져요", false);
 }
@@ -670,7 +742,7 @@ const groupColor = g => `var(--series-${g + 1})`;
 /* 점 목록 — {g(조), i(행), s(계열), x, y}. free는 x·y 둘 다 있어야 점이 된다 */
 const allPoints = (visibleOnly = false) => {
   const pts = [];
-  state.data.forEach((row, g) => {
+  state.data.slice(0, G).forEach((row, g) => {
     if (visibleOnly && !state.visible[g]) return;
     row.forEach((cell, i) => {
       if (MODE === "fixed") {
@@ -791,7 +863,7 @@ function drawPoint(layer, s, p, { ghost = false, pop = false, r = 9 } = {}) {
   }
   c.dataset.key = `${p.g}:${p.i}:${p.s}`;
   const sName = MODE === "dual" ? ` ${CONFIG.ySeries[p.s]}` : "";
-  c.dataset.tip = `${CONFIG.groupNames[p.g]}${sName} · ${CONFIG.xLabel} ${fmt(p.x)}${CONFIG.xUnit} → ${CONFIG.yLabel} ${fmt(p.y)}${CONFIG.yUnit}`;
+  c.dataset.tip = `${groupNames[p.g]}${sName} · ${CONFIG.xLabel} ${fmt(p.x)}${CONFIG.xUnit} → ${CONFIG.yLabel} ${fmt(p.y)}${CONFIG.yUnit}`;
   if (!ghost) {                               // 키보드(Tab)·스크린리더로도 점 값에 접근
     c.setAttribute("tabindex", "0");
     c.setAttribute("aria-label", c.dataset.tip);
@@ -947,7 +1019,7 @@ function trendReadout(trend, ptCount, group = null) {
     const what = MODE === "dual"
       ? `<b>● ${esc(CONFIG.ySeries[0])}</b>: 실선 · <b>○ ${esc(CONFIG.ySeries[1])}</b>: 점선`
       : "";
-    const scope = group == null ? "학급 평균" : `${esc(CONFIG.groupNames[group])} 측정값의 평균`;
+    const scope = group == null ? "학급 평균" : `${esc(groupNames[group])} 측정값의 평균`;
     return `추세선: 각 ${esc(CONFIG.xLabel)}에서 <b>${scope}</b>을 부드럽게 이은 곡선${what ? " — " + what : ""}${tail}`;
   }
   const fit = trend.fit;
@@ -997,7 +1069,7 @@ function renderGroup(g) {
   const scene = sceneEls.group;
   scene.style.setProperty("--group-color", groupColor(g));
   scene.querySelector(".group-badge .swatch").style.background = groupColor(g);
-  $("#group-name").textContent = CONFIG.groupNames[g];
+  $("#group-name").textContent = groupNames[g];
   scene.querySelector(".table-hint").textContent = MODE === "free"
     ? "측정한 두 값을 모두 넣고 Enter — 표의 숫자가 그래프의 점이 됩니다"
     : "값을 넣고 Enter — 표의 숫자가 그래프의 점이 됩니다";
@@ -1156,11 +1228,11 @@ function flyDot(cellEl, targetCircle, color, onLand) {
   }, 820);
 }
 
-function renderSummary(animateTrend = false) {
+function renderSummary(animateTrend = false, scene = sceneEls.summary, instant = false) {
   // 범례 (조별 토글 + 추세선 토글)
-  const legend = $("#legend");
+  const legend = scene.querySelector(".legend");
   legend.innerHTML = "";
-  CONFIG.groupNames.forEach((name, g) => {
+  groupNames.forEach((name, g) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "chip" + (state.visible[g] ? "" : " off");
@@ -1195,25 +1267,27 @@ function renderSummary(animateTrend = false) {
     legend.appendChild(btn);
   }
 
-  const svg = $("#svg-summary");
+  const svg = scene.querySelector("svg");
   const chart = drawChart(svg, xMaxNow(), yMaxNow());
   const pts = allPoints(true);
 
   // 조별로 시차를 두고 등장 (모이는 느낌 — 움직임 줄이기면 즉시)
   const stagger = REDUCED_MOTION ? 0 : 130;
-  CONFIG.groupNames.forEach((_, g) => {
-    setTimeout(() => {
+  groupNames.forEach((_, g) => {
+    const draw = () => {
       for (const p of pts.filter(p => p.g === g))
-        drawPoint(chart.ptLayer, chart.s, p, { pop: true });
-    }, g * stagger);
+        drawPoint(chart.ptLayer, chart.s, p, { pop: !instant });
+    };
+    if (instant) draw(); else setTimeout(draw, g * stagger);
   });
 
   // 추세선 + 읽어주기
-  const readout = $("#trend-readout");
+  const readout = scene.querySelector(".trend-readout");
   if (state.trendOn && CONFIG.trendline) {
     const trend = computeTrend(pts);
-    setTimeout(() => drawTrend(chart.trendLayer, chart, trend, animateTrend),
-      G * stagger + 100);
+    if (instant) drawTrend(chart.trendLayer, chart, trend, false);
+    else setTimeout(() => drawTrend(chart.trendLayer, chart, trend, animateTrend),
+        G * stagger + 100);
     readout.innerHTML = trendReadout(trend, pts.length);
   } else {
     readout.textContent = "";
@@ -1221,7 +1295,7 @@ function renderSummary(animateTrend = false) {
 }
 
 /* ============================================================
-   §6 내보내기 — CSV(측정값 표), PNG(종합 그래프)
+   §6 내보내기 — CSV(측정값 표), PNG(종합 화면)
    ============================================================ */
 function downloadBlob(filename, blob) {
   const a = document.createElement("a");
@@ -1241,17 +1315,17 @@ function exportCSV() {
   const rows = [[CONFIG.title], []];           // 첫 줄 제목, 둘째 줄 공백
   if (MODE === "free") {                       // 세로 형식: 조, x, y
     rows.push(["조", xh, yh]);
-    for (const p of allPoints()) rows.push([CONFIG.groupNames[p.g], p.x, p.y]);
+    for (const p of allPoints()) rows.push([groupNames[p.g], p.x, p.y]);
   } else if (MODE === "dual") {                // 가로 형식: 조 × 계열 행
     rows.push([`세로축: ${yh}`]);
     rows.push(["조", "계열", ...CONFIG.xValues.map(x => `${xh.split("(")[0]} ${fmt(x)}${CONFIG.xUnit}`)]);
-    CONFIG.groupNames.forEach((name, g) =>
+    groupNames.forEach((name, g) =>
       CONFIG.ySeries.forEach((sn, si) =>
         rows.push([name, sn, ...state.data[g].map(cell => cell[si] ?? "")])));
   } else {                                     // 가로 형식: 조 행
     rows.push([`세로축: ${yh}`]);
     rows.push(["조", ...CONFIG.xValues.map(x => `${xh.split("(")[0]} ${fmt(x)}${CONFIG.xUnit}`)]);
-    CONFIG.groupNames.forEach((name, g) =>
+    groupNames.forEach((name, g) =>
       rows.push([name, ...state.data[g].map(v => v ?? "")]));
   }
   // ﻿(BOM): 엑셀이 UTF-8 한글을 바로 읽게 하는 표식
@@ -1259,45 +1333,77 @@ function exportCSV() {
   downloadBlob(`${CONFIG.slug || "data"}.csv`, new Blob([csv], { type: "text/csv;charset=utf-8" }));
 }
 
-/* 종합 그래프를 PNG로 저장. 화면의 SVG 대신 화면 밖에 애니메이션 없이
-   새로 그려서 찍는다 — 어느 씬에서 눌러도, 점 등장 중이어도 완성본이 나온다. */
-function exportPNG() {
-  const tmp = el("svg");
-  tmp.id = "svg-export";
-  tmp.style.cssText = `position:fixed;left:-10000px;top:0;width:${VB.w}px;height:${VB.h}px`;
-  document.body.appendChild(tmp);
-  const chart = drawChart(tmp, xMaxNow(), yMaxNow());
-  const pts = allPoints(true);
-  for (const p of pts) drawPoint(chart.ptLayer, chart.s, p);
-  if (state.trendOn && CONFIG.trendline) drawTrend(chart.trendLayer, chart, computeTrend(pts), false);
-
-  // CSS 클래스는 PNG 직렬화에 반영되지 않으므로 계산된 스타일을 인라인으로 복사
-  const PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap",
-                 "font-family", "font-size", "font-weight", "opacity"];
-  for (const node of tmp.querySelectorAll("*")) {
-    const cs = getComputedStyle(node);
-    for (const prop of PROPS) node.style.setProperty(prop, cs.getPropertyValue(prop));
+/* 종합 화면을 복제해 제목·범례·그래프·설명을 함께 저장한다.
+   현재 씬을 바꾸지 않고 애니메이션 없는 완성본을 만든다. 작은 창에서도
+   범례/설명이 잘리지 않게 세로로 늘린다. 외부 라이브러리·통신은 불필요. */
+function summaryImageSVG() {
+  const scene = sceneEls.summary.cloneNode(true);
+  scene.querySelectorAll("[id]").forEach(node => node.removeAttribute("id"));
+  scene.removeAttribute("id");
+  scene.classList.add("active");
+  scene.setAttribute("aria-hidden", "true");
+  scene.inert = true;
+  const stage = $("main.stage");
+  const width = Math.max(640, stage.clientWidth);
+  scene.style.cssText = `position:fixed;inset:auto;left:-10000px;top:0;
+    width:${width}px;height:auto;padding:28px 44px;background:var(--page)`;
+  scene.querySelector(".scene-body").style.cssText =
+    `flex:none;height:${Math.max(320, stage.clientHeight - 260)}px`;
+  scene.querySelector("svg").id = "svg-export";
+  const title = document.createElement("p");
+  title.className = "scene-sub";
+  title.textContent = CONFIG.title;
+  scene.prepend(title);
+  document.body.appendChild(scene);
+  try {
+    renderSummary(false, scene, true);
+    const height = Math.ceil(scene.getBoundingClientRect().height);
+    // 부모의 인라인 스타일이 자식의 계산값을 바꾸기 전에 전부 읽는다.
+    const styles = [scene, ...scene.querySelectorAll("*")].map(node => {
+      const cs = getComputedStyle(node);
+      return [node, Array.from(cs, prop => [prop, cs.getPropertyValue(prop)])];
+    });
+    for (const [node, props] of styles) {
+      for (const [prop, value] of props) node.style.setProperty(prop, value);
+      node.style.animation = "none";
+      node.style.transition = "none";
+    }
+    scene.style.position = "static";
+    scene.style.inset = "auto";
+    scene.style.margin = "0";
+    const svg = el("svg", { width, height, viewBox: `0 0 ${width} ${height}` });
+    el("foreignObject", { width, height }, svg).appendChild(scene);
+    return { xml: new XMLSerializer().serializeToString(svg), width, height };
+  } finally {
+    scene.remove();
   }
-  const bg = el("rect", { x: 0, y: 0, width: VB.w, height: VB.h });
-  bg.style.fill = getComputedStyle(document.body).getPropertyValue("--surface-1").trim() || "#fff";
-  tmp.insertBefore(bg, tmp.firstChild);
-  tmp.setAttribute("width", VB.w);
-  tmp.setAttribute("height", VB.h);
-  // 화면 밖 배치용 style이 이미지로 렌더링될 때 내용을 밀어내므로 반드시 제거
-  tmp.removeAttribute("style");
-  const xml = new XMLSerializer().serializeToString(tmp);
-  tmp.remove();
+}
 
-  const img = new Image();
-  img.onload = () => {
+async function exportPNG() {
+  const button = $("#btn-png");
+  button.disabled = true;
+  try {
+    await document.fonts.ready;
+    const { xml, width, height } = summaryImageSVG();
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+    });
     const scale = 2;                           // 2배 해상도로 선명하게
     const canvas = document.createElement("canvas");
-    canvas.width = VB.w * scale;
-    canvas.height = VB.h * scale;
+    canvas.width = width * scale;
+    canvas.height = height * scale;
     canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(b => downloadBlob(`${CONFIG.slug || "graph"}.png`, b), "image/png");
-  };
-  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("PNG 생성 실패");
+    downloadBlob(`${CONFIG.slug || "graph"}.png`, blob);
+  } catch (e) {
+    showToast("그림을 저장하지 못했습니다. 다시 시도해 주세요", false);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 $("#btn-csv").addEventListener("click", exportCSV);
@@ -1352,7 +1458,7 @@ $("#btn-clear-group").addEventListener("click", () => {
   const g = state.group;
   doClear(g);
   renderGroup(g);
-  showToast(`${CONFIG.groupNames[g]} 값을 지웠습니다`);
+  showToast(`${groupNames[g]} 값을 지웠습니다`);
 });
 
 /* ============================================================
@@ -1380,7 +1486,7 @@ function renderDots() {
     d.type = "button";
     d.className = i === state.scene ? "on" : "";
     d.title = sceneKind(i) === "intro" ? "도입"
-      : sceneKind(i) === "group" ? CONFIG.groupNames[i - 1] : "종합";
+      : sceneKind(i) === "group" ? groupNames[i - 1] : "종합";
     d.setAttribute("aria-label", d.title + " 씬으로 이동");
     d.addEventListener("click", () => showScene(i));
     dots.appendChild(d);
@@ -1390,10 +1496,12 @@ function renderDots() {
 $("#btn-prev").addEventListener("click", () => showScene(state.scene - 1));
 $("#btn-next").addEventListener("click", () => showScene(state.scene + 1));
 
-/* 키보드: ←/→/Space 이전·다음, Home/0 도입, End/9 종합, 1~6 해당 조
+/* 키보드: ←/→/Space 이전·다음, Home/0 도입, End 종합, 1~9 해당 조
+   (9조가 없으면 기존 단축키 9 = 종합 유지, 10조는 내비게이션으로 이동)
    (프레젠터 리모컨의 이전/다음 버튼은 ←/→로 들어오므로 그대로 동작) */
 document.addEventListener("keydown", e => {
-  if (e.target.tagName === "INPUT") return;    // 표 입력 중에는 씬 이동 금지
+  if ($("#group-setup").open || /^(INPUT|SELECT)$/.test(e.target.tagName)) return;
+  if (e.target.tagName === "BUTTON" && (e.key === " " || e.key === "Enter")) return;
   if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); showScene(state.scene + 1); }
   else if (e.key === "ArrowLeft") { e.preventDefault(); showScene(state.scene - 1); }
   else if (e.key === "Home") { e.preventDefault(); showScene(0); }
@@ -1419,13 +1527,13 @@ function effectiveDark() {
   return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
 }
 {
-  const saved = localStorage.getItem(THEME_KEY);
+  const saved = store.get(THEME_KEY);
   if (saved === "dark" || saved === "light") document.documentElement.dataset.theme = saved;
 }
 $("#btn-theme").addEventListener("click", () => {
   const next = effectiveDark() ? "light" : "dark";
   document.documentElement.dataset.theme = next;
-  localStorage.setItem(THEME_KEY, next);
+  store.set(THEME_KEY, next);
   showScene(state.scene);                      // 색이 바뀌었으니 현재 씬 다시 그림
 });
 
@@ -1464,7 +1572,38 @@ document.addEventListener("focusout", hideTip);
    ============================================================ */
 document.title = "조별 실험 그래프 — " + CONFIG.title;
 $("#bar-title").textContent = CONFIG.title;
+const groupSetup = $("#group-setup");
+const groupCountSelect = $("#group-count");
+ALL_GROUP_NAMES.forEach((_, i) => {
+  groupCountSelect.add(new Option(`${i + 1}개 조`, String(i + 1)));
+});
+function openGroupSetup() {
+  groupCountSelect.value = String(G);
+  $("#btn-start").textContent = groupsConfigured ? "적용" : "실험 시작";
+  groupSetup.showModal();
+}
+groupSetup.addEventListener("cancel", e => {
+  if (!groupsConfigured) e.preventDefault();
+});
+$("#btn-groups").addEventListener("click", openGroupSetup);
+$("#group-setup-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const count = Number(groupCountSelect.value);
+  if (!Number.isInteger(count) || count < 1 || count > ALL_GROUP_NAMES.length) return;
+  G = count;
+  groupNames = ALL_GROUP_NAMES.slice(0, G);
+  SCENES = G + 2;
+  state.visible = Array(G).fill(true);
+  state.groupTrendOn = Array(G).fill(false);
+  groupsConfigured = true;
+  const saved = store.set(GROUP_COUNT_KEY, String(G));
+  groupSetup.close();
+  showScene(0);
+  $("#btn-next").focus();
+  if (!saved) warnSaveFailure();
+});
 showScene(0);
+if (!groupsConfigured) openGroupSetup();
 </script>
 </body>
 </html>
